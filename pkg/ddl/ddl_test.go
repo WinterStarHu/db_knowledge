@@ -1,0 +1,701 @@
+// Copyright 2015 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package ddl
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/pingcap/tidb/pkg/ddl/jobsubmit"
+	sess "github.com/pingcap/tidb/pkg/ddl/session"
+	"github.com/pingcap/tidb/pkg/ddl/testargsv1"
+	"github.com/pingcap/tidb/pkg/domain/serverinfo"
+	"github.com/pingcap/tidb/pkg/infoschema"
+	"github.com/pingcap/tidb/pkg/kv"
+	"github.com/pingcap/tidb/pkg/meta/metabuild"
+	"github.com/pingcap/tidb/pkg/meta/metadef"
+	"github.com/pingcap/tidb/pkg/meta/model"
+	"github.com/pingcap/tidb/pkg/parser"
+	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser/charset"
+	"github.com/pingcap/tidb/pkg/parser/mysql"
+	"github.com/pingcap/tidb/pkg/parser/terror"
+	"github.com/pingcap/tidb/pkg/table"
+	"github.com/pingcap/tidb/pkg/tablecodec"
+	"github.com/pingcap/tidb/pkg/testkit/testfailpoint"
+	"github.com/pingcap/tidb/pkg/util/dbterror"
+	"github.com/pingcap/tidb/pkg/util/generic"
+	"github.com/pingcap/tidb/pkg/util/mock"
+	"github.com/stretchr/testify/require"
+	clientv3 "go.etcd.io/etcd/client/v3"
+)
+
+// DDLForTest exports for testing.
+type DDLForTest interface {
+	NewReorgCtx(jobID int64, rowCount int64) *reorgCtx
+	GetReorgCtx(jobID int64) *reorgCtx
+	RemoveReorgCtx(id int64)
+}
+
+// NewReorgCtx exports for testing.
+func (d *ddl) NewReorgCtx(jobID int64, rowCount int64) *reorgCtx {
+	return d.newReorgCtx(jobID, rowCount)
+}
+
+// GetReorgCtx exports for testing.
+func (d *ddl) GetReorgCtx(jobID int64) *reorgCtx {
+	return d.getReorgCtx(jobID)
+}
+
+// RemoveReorgCtx exports for testing.
+func (d *ddl) RemoveReorgCtx(id int64) {
+	d.removeReorgCtx(id)
+}
+
+func NewJobSubmitterForTest() *JobSubmitter {
+	syncMap := generic.NewSyncMap[int64, chan struct{}](8)
+	return &JobSubmitter{
+		ddlJobDoneChMap: &syncMap,
+	}
+}
+
+func (s *JobSubmitter) DDLJobDoneChMap() *generic.SyncMap[int64, chan struct{}] {
+	return s.ddlJobDoneChMap
+}
+
+// GenGIDAndInsertJobsWithRetry generates job related global ID and inserts DDL jobs to the DDL job
+// table with retry. job id allocation and job insertion are in the same transaction,
+// as we want to make sure DDL jobs are inserted in id order, then we can query from
+// a min job ID when scheduling DDL jobs to mitigate https://github.com/pingcap/tidb/issues/52905.
+// so this function has side effect, it will set table/db/job id of 'jobs'.
+func (s *JobSubmitter) GenGIDAndInsertJobsWithRetry(ctx context.Context, ddlSe *sess.Session, jobWs []*JobWrapper) error {
+	return jobsubmit.GenGIDAndInsertJobsWithRetry(ctx, ddlSe, jobWrappersToSpecs(jobWs), s.registerJobDoneChannels)
+}
+
+func TestGetIntervalFromPolicy(t *testing.T) {
+	policy := []time.Duration{
+		1 * time.Second,
+		2 * time.Second,
+	}
+	var (
+		val     time.Duration
+		changed bool
+	)
+
+	val, changed = getIntervalFromPolicy(policy, 0)
+	require.Equal(t, val, 1*time.Second)
+	require.True(t, changed)
+
+	val, changed = getIntervalFromPolicy(policy, 1)
+	require.Equal(t, val, 2*time.Second)
+	require.True(t, changed)
+
+	val, changed = getIntervalFromPolicy(policy, 2)
+	require.Equal(t, val, 2*time.Second)
+	require.False(t, changed)
+
+	val, changed = getIntervalFromPolicy(policy, 3)
+	require.Equal(t, val, 2*time.Second)
+	require.False(t, changed)
+}
+
+func colDefStrToColInfo(t *testing.T, str string, ctx *metabuild.Context) *model.ColumnInfo {
+	sqlA := "alter table t modify column a " + str
+	stmt, err := parser.New().ParseOneStmt(sqlA, "", "")
+	require.NoError(t, err)
+	colDef := stmt.(*ast.AlterTableStmt).Specs[0].NewColumns[0]
+	chs, coll := charset.GetDefaultCharsetAndCollate()
+	col, _, err := buildColumnAndConstraint(ctx, 0, colDef, nil, chs, coll)
+	require.NoError(t, err)
+	return col.ToInfo()
+}
+
+func TestModifyColumn(t *testing.T) {
+	ctx := NewMetaBuildContextWithSctx(mock.NewContext())
+	tests := []struct {
+		origin string
+		to     string
+		err    error
+	}{
+		{"int", "bigint", nil},
+		{"int", "int unsigned", nil},
+		{"varchar(10)", "text", nil},
+		{"varbinary(10)", "blob", nil},
+		{"text", "blob", dbterror.ErrUnsupportedModifyCharset.GenWithStackByArgs("charset from utf8mb4 to binary")},
+		{"varchar(10)", "varchar(8)", nil},
+		{"varchar(10)", "varchar(11)", nil},
+		{"varchar(10) character set utf8 collate utf8_bin", "varchar(10) character set utf8", nil},
+		{"decimal(2,1)", "decimal(3,2)", nil},
+		{"decimal(2,1)", "decimal(2,2)", nil},
+		{"decimal(2,1)", "decimal(2,1)", nil},
+		{"decimal(2,1)", "int", nil},
+		{"decimal", "int", nil},
+		{"decimal(2,1)", "bigint", nil},
+		{"int", "varchar(10) character set gbk", dbterror.ErrUnsupportedModifyCharset.GenWithStackByArgs("charset from binary to gbk")},
+		{"varchar(10) character set gbk", "int", dbterror.ErrUnsupportedModifyCharset.GenWithStackByArgs("charset from gbk to binary")},
+		{"varchar(10) character set gbk", "varchar(10) character set utf8", dbterror.ErrUnsupportedModifyCharset.GenWithStackByArgs("charset from gbk to utf8")},
+		{"varchar(10) character set gbk", "char(10) character set utf8", dbterror.ErrUnsupportedModifyCharset.GenWithStackByArgs("charset from gbk to utf8")},
+		{"varchar(10) character set utf8", "char(10) character set gbk", dbterror.ErrUnsupportedModifyCharset.GenWithStackByArgs("charset from utf8 to gbk")},
+		{"varchar(10) character set utf8", "varchar(10) character set gbk", dbterror.ErrUnsupportedModifyCharset.GenWithStackByArgs("charset from utf8 to gbk")},
+		{"varchar(10) character set gbk", "varchar(255) character set gbk", nil},
+	}
+	for _, tt := range tests {
+		colA := colDefStrToColInfo(t, tt.origin, ctx)
+		colB := colDefStrToColInfo(t, tt.to, ctx)
+		err := checkModifyTypes(colA, colB, false)
+		if err == nil {
+			require.NoErrorf(t, tt.err, "origin:%v, to:%v", tt.origin, tt.to)
+		} else {
+			require.EqualError(t, err, tt.err.Error())
+		}
+	}
+}
+
+func TestProcessModifyColumnOptionsGenerated(t *testing.T) {
+	sctx := mock.NewContext()
+
+	// Test that ProcessModifyColumnOptions sets RestoreWithoutSchemaName | RestoreWithoutTableName
+	// when restoring generated column expressions, so table-qualified column references are stripped.
+	// This covers the same behavior as create_table.go, add_column.go, etc.
+	testCases := []struct {
+		alterTableSQL  string
+		colName        string
+		expectedExpr   string
+		expectedStored bool
+	}{
+		{
+			alterTableSQL:  "ALTER TABLE t MODIFY COLUMN b INT GENERATED ALWAYS AS (t.a + 1) STORED",
+			colName:        "b",
+			expectedExpr:   "`a` + 1",
+			expectedStored: true,
+		},
+		{
+			alterTableSQL:  "ALTER TABLE t MODIFY COLUMN c VARCHAR(100) GENERATED ALWAYS AS (LOWER(t.a)) STORED",
+			colName:        "c",
+			expectedExpr:   "lower(`a`)",
+			expectedStored: true,
+		},
+		{
+			alterTableSQL:  "ALTER TABLE t MODIFY COLUMN d INT GENERATED ALWAYS AS (t.a * t.b) VIRTUAL",
+			colName:        "d",
+			expectedExpr:   "`a` * `b`",
+			expectedStored: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		stmt, err := parser.New().ParseOneStmt(tc.alterTableSQL, "", "")
+		require.NoError(t, err)
+		alterStmt := stmt.(*ast.AlterTableStmt)
+		options := alterStmt.Specs[0].NewColumns[0].Options
+
+		col := &table.Column{
+			ColumnInfo: &model.ColumnInfo{
+				Name: ast.NewCIStr(tc.colName),
+			},
+		}
+
+		err = ProcessModifyColumnOptions(sctx, col, options)
+		require.NoError(t, err)
+		require.Equal(t, tc.expectedExpr, col.GeneratedExprString, "generated expr string mismatch for %q", tc.alterTableSQL)
+		require.Equal(t, tc.expectedStored, col.GeneratedStored)
+		require.NotNil(t, col.GeneratedExpr)
+	}
+}
+
+func TestFieldCase(t *testing.T) {
+	var fields = []string{"field", "Field"}
+	colObjects := make([]*model.ColumnInfo, len(fields))
+	for i, name := range fields {
+		colObjects[i] = &model.ColumnInfo{
+			Name: ast.NewCIStr(name),
+		}
+	}
+	err := checkDuplicateColumn(colObjects)
+	require.EqualError(t, err, infoschema.ErrColumnExists.GenWithStackByArgs("Field").Error())
+}
+
+func TestIgnorableSpec(t *testing.T) {
+	specs := []ast.AlterTableType{
+		ast.AlterTableOption,
+		ast.AlterTableAddColumns,
+		ast.AlterTableAddConstraint,
+		ast.AlterTableDropColumn,
+		ast.AlterTableDropPrimaryKey,
+		ast.AlterTableDropIndex,
+		ast.AlterTableDropForeignKey,
+		ast.AlterTableModifyColumn,
+		ast.AlterTableChangeColumn,
+		ast.AlterTableRenameTable,
+		ast.AlterTableAlterColumn,
+	}
+	for _, spec := range specs {
+		require.False(t, isIgnorableSpec(spec))
+	}
+
+	ignorableSpecs := []ast.AlterTableType{
+		ast.AlterTableLock,
+		ast.AlterTableAlgorithm,
+	}
+	for _, spec := range ignorableSpecs {
+		require.True(t, isIgnorableSpec(spec))
+	}
+}
+
+func TestError(t *testing.T) {
+	kvErrs := []*terror.Error{
+		dbterror.ErrDDLJobNotFound,
+		dbterror.ErrCancelFinishedDDLJob,
+		dbterror.ErrCannotCancelDDLJob,
+	}
+	for _, err := range kvErrs {
+		code := terror.ToSQLError(err).Code
+		require.NotEqual(t, mysql.ErrUnknown, code)
+		require.Equal(t, uint16(err.Code()), code)
+	}
+}
+
+func TestCheckDuplicateConstraint(t *testing.T) {
+	constrNames := map[string]bool{}
+
+	// Foreign Key
+	err := checkDuplicateConstraint(constrNames, "f1", ast.ConstraintForeignKey)
+	require.NoError(t, err)
+	err = checkDuplicateConstraint(constrNames, "f1", ast.ConstraintForeignKey)
+	require.EqualError(t, err, "[ddl:1826]Duplicate foreign key constraint name 'f1'")
+
+	// Check constraint
+	err = checkDuplicateConstraint(constrNames, "c1", ast.ConstraintCheck)
+	require.NoError(t, err)
+	err = checkDuplicateConstraint(constrNames, "c1", ast.ConstraintCheck)
+	require.EqualError(t, err, "[ddl:3822]Duplicate check constraint name 'c1'.")
+
+	// Unique contraints etc
+	err = checkDuplicateConstraint(constrNames, "u1", ast.ConstraintUniq)
+	require.NoError(t, err)
+	err = checkDuplicateConstraint(constrNames, "u1", ast.ConstraintUniq)
+	require.EqualError(t, err, "[ddl:1061]Duplicate key name 'u1'")
+}
+
+func TestGetTableDataKeyRanges(t *testing.T) {
+	// case 1, empty flashbackIDs
+	keyRanges := getTableDataKeyRanges([]int64{})
+	require.Len(t, keyRanges, 1)
+	require.Equal(t, keyRanges[0].StartKey, tablecodec.EncodeTablePrefix(0))
+	require.Equal(t, keyRanges[0].EndKey, tablecodec.EncodeTablePrefix(metadef.MaxUserGlobalID))
+
+	// case 2, insert a execluded table ID
+	keyRanges = getTableDataKeyRanges([]int64{3})
+	require.Len(t, keyRanges, 2)
+	require.Equal(t, keyRanges[0].StartKey, tablecodec.EncodeTablePrefix(0))
+	require.Equal(t, keyRanges[0].EndKey, tablecodec.EncodeTablePrefix(3))
+	require.Equal(t, keyRanges[1].StartKey, tablecodec.EncodeTablePrefix(4))
+	require.Equal(t, keyRanges[1].EndKey, tablecodec.EncodeTablePrefix(metadef.MaxUserGlobalID))
+
+	// case 3, insert some execluded table ID
+	keyRanges = getTableDataKeyRanges([]int64{3, 5, 9})
+	require.Len(t, keyRanges, 4)
+	require.Equal(t, keyRanges[0].StartKey, tablecodec.EncodeTablePrefix(0))
+	require.Equal(t, keyRanges[0].EndKey, tablecodec.EncodeTablePrefix(3))
+	require.Equal(t, keyRanges[1].StartKey, tablecodec.EncodeTablePrefix(4))
+	require.Equal(t, keyRanges[1].EndKey, tablecodec.EncodeTablePrefix(5))
+	require.Equal(t, keyRanges[2].StartKey, tablecodec.EncodeTablePrefix(6))
+	require.Equal(t, keyRanges[2].EndKey, tablecodec.EncodeTablePrefix(9))
+	require.Equal(t, keyRanges[3].StartKey, tablecodec.EncodeTablePrefix(10))
+	require.Equal(t, keyRanges[3].EndKey, tablecodec.EncodeTablePrefix(metadef.MaxUserGlobalID))
+}
+
+func TestFindNextNonTouchedPartitionID(t *testing.T) {
+	defs := func(ids ...int64) []model.PartitionDefinition {
+		res := make([]model.PartitionDefinition, 0, len(ids))
+		for _, id := range ids {
+			res = append(res, model.PartitionDefinition{ID: id})
+		}
+		return res
+	}
+	// p2 and p3 are reorganized into new partitions, i.e. they are in
+	// DroppingDefinitions, while p1, p4 and p5 are non-touched.
+	pi := &model.PartitionInfo{
+		Definitions:         defs(1, 2, 3, 4, 5),
+		DroppingDefinitions: defs(2, 3),
+	}
+	for _, c := range []struct {
+		curr int64
+		next int64
+	}{
+		{1, 4},
+		{2, 4},
+		{3, 4},
+		{4, 5},
+		{5, 0},
+	} {
+		require.Equal(t, c.next, findNextNonTouchedPartitionID(c.curr, pi), "curr %d", c.curr)
+	}
+	// Not a partition of the table.
+	require.Equal(t, int64(0), findNextNonTouchedPartitionID(6, pi))
+
+	// No non-touched partitions left after p1.
+	pi = &model.PartitionInfo{
+		Definitions:         defs(1, 2, 3),
+		DroppingDefinitions: defs(2, 3),
+	}
+	require.Equal(t, int64(0), findNextNonTouchedPartitionID(1, pi))
+}
+
+func TestMergeContinuousKeyRanges(t *testing.T) {
+	cases := []struct {
+		input  []keyRangeMayExclude
+		expect []kv.KeyRange
+	}{
+		{
+			[]keyRangeMayExclude{
+				{
+					r:       kv.KeyRange{StartKey: []byte{1}, EndKey: []byte{2}},
+					exclude: true,
+				},
+			},
+			[]kv.KeyRange{},
+		},
+		{
+			[]keyRangeMayExclude{
+				{
+					r:       kv.KeyRange{StartKey: []byte{1}, EndKey: []byte{2}},
+					exclude: false,
+				},
+			},
+			[]kv.KeyRange{{StartKey: []byte{1}, EndKey: []byte{2}}},
+		},
+		{
+			[]keyRangeMayExclude{
+				{
+					r:       kv.KeyRange{StartKey: []byte{1}, EndKey: []byte{2}},
+					exclude: false,
+				},
+				{
+					r:       kv.KeyRange{StartKey: []byte{3}, EndKey: []byte{4}},
+					exclude: false,
+				},
+			},
+			[]kv.KeyRange{{StartKey: []byte{1}, EndKey: []byte{4}}},
+		},
+		{
+			[]keyRangeMayExclude{
+				{
+					r:       kv.KeyRange{StartKey: []byte{1}, EndKey: []byte{2}},
+					exclude: false,
+				},
+				{
+					r:       kv.KeyRange{StartKey: []byte{3}, EndKey: []byte{4}},
+					exclude: true,
+				},
+				{
+					r:       kv.KeyRange{StartKey: []byte{5}, EndKey: []byte{6}},
+					exclude: false,
+				},
+			},
+			[]kv.KeyRange{
+				{StartKey: []byte{1}, EndKey: []byte{2}},
+				{StartKey: []byte{5}, EndKey: []byte{6}},
+			},
+		},
+		{
+			[]keyRangeMayExclude{
+				{
+					r:       kv.KeyRange{StartKey: []byte{1}, EndKey: []byte{2}},
+					exclude: true,
+				},
+				{
+					r:       kv.KeyRange{StartKey: []byte{3}, EndKey: []byte{4}},
+					exclude: true,
+				},
+				{
+					r:       kv.KeyRange{StartKey: []byte{5}, EndKey: []byte{6}},
+					exclude: false,
+				},
+			},
+			[]kv.KeyRange{{StartKey: []byte{5}, EndKey: []byte{6}}},
+		},
+		{
+			[]keyRangeMayExclude{
+				{
+					r:       kv.KeyRange{StartKey: []byte{1}, EndKey: []byte{2}},
+					exclude: false,
+				},
+				{
+					r:       kv.KeyRange{StartKey: []byte{3}, EndKey: []byte{4}},
+					exclude: true,
+				},
+				{
+					r:       kv.KeyRange{StartKey: []byte{5}, EndKey: []byte{6}},
+					exclude: true,
+				},
+			},
+			[]kv.KeyRange{{StartKey: []byte{1}, EndKey: []byte{2}}},
+		},
+		{
+			[]keyRangeMayExclude{
+				{
+					r:       kv.KeyRange{StartKey: []byte{1}, EndKey: []byte{2}},
+					exclude: true,
+				},
+				{
+					r:       kv.KeyRange{StartKey: []byte{3}, EndKey: []byte{4}},
+					exclude: false,
+				},
+				{
+					r:       kv.KeyRange{StartKey: []byte{5}, EndKey: []byte{6}},
+					exclude: true,
+				},
+			},
+			[]kv.KeyRange{{StartKey: []byte{3}, EndKey: []byte{4}}},
+		},
+	}
+
+	for i, ca := range cases {
+		ranges := mergeContinuousKeyRanges(ca.input)
+		require.Equal(t, ca.expect, ranges, "case %d", i)
+	}
+}
+
+func TestDetectAndUpdateJobVersion(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	d := &ddl{ddlCtx: &ddlCtx{ctx: ctx}}
+
+	reset := func() {
+		model.SetJobVerInUse(model.JobVersion1)
+		model.SetGlobalIndexV1Supported(false)
+	}
+	t.Cleanup(reset)
+	// other ut in the same address space might change it
+	reset()
+	require.Equal(t, model.JobVersion1, model.GetJobVerInUse())
+	require.False(t, model.GetGlobalIndexV1Supported())
+
+	t.Run("in ut", func(t *testing.T) {
+		reset()
+		d.detectAndUpdateJobVersion()
+		if testargsv1.ForceV1 {
+			require.Equal(t, model.JobVersion1, model.GetJobVerInUse())
+		} else {
+			require.Equal(t, model.JobVersion2, model.GetJobVerInUse())
+		}
+		require.True(t, model.GetGlobalIndexV1Supported())
+	})
+
+	d.etcdCli = &clientv3.Client{}
+	mockGetAllServerInfo := func(t *testing.T, versions ...string) {
+		serverInfos := make(map[string]*serverinfo.ServerInfo, len(versions))
+		for i, v := range versions {
+			serverInfos[fmt.Sprintf("node%d", i)] = &serverinfo.ServerInfo{
+				StaticInfo: serverinfo.StaticInfo{
+					VersionInfo: serverinfo.VersionInfo{Version: v},
+				}}
+		}
+		bytes, err := json.Marshal(serverInfos)
+		require.NoError(t, err)
+		inTerms := fmt.Sprintf("return(`%s`)", string(bytes))
+		testfailpoint.Enable(t, "github.com/pingcap/tidb/pkg/domain/serverinfo/mockGetAllServerInfo", inTerms)
+	}
+
+	t.Run("all support v2 and global index v1", func(t *testing.T) {
+		reset()
+		mockGetAllServerInfo(t, "8.0.11-TiDB-v8.5.6-alpha-228-g650888fea7-dirty",
+			"8.0.11-TiDB-v9.0.0", "8.0.11-TiDB-8.5.6-beta")
+		d.detectAndUpdateJobVersionOnce()
+		require.Equal(t, model.JobVersion2, model.GetJobVerInUse())
+		require.True(t, model.GetGlobalIndexV1Supported())
+	})
+
+	t.Run("all support v2 but not global index v1", func(t *testing.T) {
+		reset()
+		mockGetAllServerInfo(t, "8.0.11-TiDB-v8.4.0", "8.0.11-TiDB-v8.5.5")
+		d.detectAndUpdateJobVersionOnce()
+		require.Equal(t, model.JobVersion2, model.GetJobVerInUse())
+		require.False(t, model.GetGlobalIndexV1Supported())
+	})
+
+	t.Run("v1 first, later all support v2 and global index v1", func(t *testing.T) {
+		reset()
+		intervalBak := detectJobVerInterval
+		t.Cleanup(func() {
+			detectJobVerInterval = intervalBak
+		})
+		detectJobVerInterval = time.Millisecond
+		// unknown version
+		mockGetAllServerInfo(t, "unknown")
+		iterateCnt := 0
+		testfailpoint.EnableCall(t, "github.com/pingcap/tidb/pkg/ddl/afterDetectAndUpdateJobVersionOnce", func() {
+			iterateCnt++
+			if iterateCnt == 1 {
+				require.Equal(t, model.JobVersion1, model.GetJobVerInUse())
+				require.False(t, model.GetGlobalIndexV1Supported())
+				// user set version explicitly in config
+				mockGetAllServerInfo(t, "9.0.0-xxx")
+			} else if iterateCnt == 2 {
+				require.Equal(t, model.JobVersion1, model.GetJobVerInUse())
+				require.False(t, model.GetGlobalIndexV1Supported())
+				// invalid version
+				mockGetAllServerInfo(t, "xxx")
+			} else if iterateCnt == 3 {
+				require.Equal(t, model.JobVersion1, model.GetJobVerInUse())
+				require.False(t, model.GetGlobalIndexV1Supported())
+				// less than 8.4.0
+				mockGetAllServerInfo(t, "8.0.11-TiDB-8.3.0")
+			} else if iterateCnt == 4 {
+				require.Equal(t, model.JobVersion1, model.GetJobVerInUse())
+				require.False(t, model.GetGlobalIndexV1Supported())
+				// upgrade case
+				mockGetAllServerInfo(t, "8.0.11-TiDB-v8.3.0", "8.0.11-TiDB-v8.3.0", "8.0.11-TiDB-v8.4.0")
+			} else if iterateCnt == 5 {
+				require.Equal(t, model.JobVersion1, model.GetJobVerInUse())
+				require.False(t, model.GetGlobalIndexV1Supported())
+				// all support job v2 but not global index v1
+				mockGetAllServerInfo(t, "8.0.11-TiDB-v8.4.0", "8.0.11-TiDB-v8.4.0", "8.0.11-TiDB-v8.4.0")
+			} else if iterateCnt == 6 {
+				require.Equal(t, model.JobVersion2, model.GetJobVerInUse())
+				require.False(t, model.GetGlobalIndexV1Supported())
+				// upgrade to version supporting global index v1
+				mockGetAllServerInfo(t, "8.0.11-TiDB-v8.5.6", "8.0.11-TiDB-v8.5.6", "8.0.11-TiDB-v8.5.6")
+			} else {
+				require.Equal(t, model.JobVersion2, model.GetJobVerInUse())
+				require.True(t, model.GetGlobalIndexV1Supported())
+			}
+		})
+		d.detectAndUpdateJobVersion()
+		d.wg.Wait()
+		require.EqualValues(t, 7, iterateCnt)
+	})
+}
+
+func TestSetGlobalIndexVersionFlag(t *testing.T) {
+	tblInfo := &model.TableInfo{} // non-clustered (zero value)
+	idxInfo := &model.IndexInfo{Global: true, Unique: false}
+
+	model.SetGlobalIndexV1Supported(false)
+	t.Cleanup(func() { model.SetGlobalIndexV1Supported(false) })
+
+	setGlobalIndexVersion(tblInfo, idxInfo)
+	require.Equal(t, uint8(0), idxInfo.GlobalIndexVersion)
+
+	model.SetGlobalIndexV1Supported(true)
+	setGlobalIndexVersion(tblInfo, idxInfo)
+	require.Equal(t, model.GlobalIndexVersionV1, idxInfo.GlobalIndexVersion)
+}
+
+func TestGetJobCheckIntervalForCreateMaterializedView(t *testing.T) {
+	val, changed := getJobCheckInterval(model.ActionCreateMaterializedView, 0)
+	require.Equal(t, slowDDLIntervalPolicy[0], val)
+	require.True(t, changed)
+
+	val, changed = getJobCheckInterval(model.ActionCreateMaterializedView, len(slowDDLIntervalPolicy))
+	require.Equal(t, slowDDLIntervalPolicy[len(slowDDLIntervalPolicy)-1], val)
+	require.False(t, changed)
+}
+
+func TestIsCreateMaterializedViewBaseCheckCancelledErr(t *testing.T) {
+	require.True(t, isCreateMaterializedViewBaseCheckCancelledErr(infoschema.ErrDatabaseNotExists.GenWithStackByArgs("test")))
+	require.True(t, isCreateMaterializedViewBaseCheckCancelledErr(infoschema.ErrTableNotExists.GenWithStackByArgs("test", "t")))
+	require.True(t, isCreateMaterializedViewBaseCheckCancelledErr(dbterror.ErrInvalidDDLJob.GenWithStackByArgs("invalid job")))
+	require.True(t, isCreateMaterializedViewBaseCheckCancelledErr(dbterror.ErrWrongObject.GenWithStackByArgs("test", "t", "BASE TABLE")))
+	require.True(t, isCreateMaterializedViewBaseCheckCancelledErr(dbterror.ErrInvalidDDLState.GenWithStackByArgs("table", model.StateDeleteOnly)))
+	require.True(t, isCreateMaterializedViewBaseCheckCancelledErr(errUnsupportedMaterializedViewOnPartitionTable("CREATE MATERIALIZED VIEW")))
+	require.False(t, isCreateMaterializedViewBaseCheckCancelledErr(fmt.Errorf("retry later")))
+}
+
+func TestBuildCreateMaterializedViewRefreshInfoUpsertSQL(t *testing.T) {
+	compactSQL := func(sql string) string { return strings.Join(strings.Fields(sql), " ") }
+
+	lastSuccessRefreshEndUnixSeconds := int64(1_767_312_304)
+	sqlNoUpdate := compactSQL(buildCreateMaterializedViewRefreshInfoUpsertSQL(1, 2, &lastSuccessRefreshEndUnixSeconds, nil, false))
+	require.NotContains(t, sqlNoUpdate, "NEXT_REFRESH_UNIX_SECONDS")
+	require.NotContains(t, sqlNoUpdate, "VALUES(NEXT_REFRESH_UNIX_SECONDS)")
+	require.Contains(t, sqlNoUpdate, "LAST_SUCCESS_REFRESH_END_UNIX_SECONDS")
+	require.Contains(t, sqlNoUpdate, "1767312304")
+
+	sqlPrewrite := compactSQL(buildCreateMaterializedViewRefreshInfoUpsertSQL(1, 2, nil, nil, false))
+	require.NotContains(t, sqlPrewrite, "1767312304")
+	require.Contains(t, sqlPrewrite, "NULL")
+
+	nextRefreshUnixSeconds := int64(1_767_312_305)
+	sqlWithValue := compactSQL(buildCreateMaterializedViewRefreshInfoUpsertSQL(1, 2, &lastSuccessRefreshEndUnixSeconds, &nextRefreshUnixSeconds, true))
+	require.Contains(t, sqlWithValue, "NEXT_REFRESH_UNIX_SECONDS")
+	require.Contains(t, sqlWithValue, "VALUES(NEXT_REFRESH_UNIX_SECONDS)")
+	require.Contains(t, sqlWithValue, "1767312305")
+
+	sqlWithNull := compactSQL(buildCreateMaterializedViewRefreshInfoUpsertSQL(1, 2, &lastSuccessRefreshEndUnixSeconds, nil, true))
+	require.Contains(t, sqlWithNull, "NEXT_REFRESH_UNIX_SECONDS")
+	require.Contains(t, sqlWithNull, "VALUES(NEXT_REFRESH_UNIX_SECONDS)")
+	require.Contains(t, sqlWithNull, ", NULL)")
+}
+
+func TestBuildCreateMaterializedViewLogPurgeInfoUpsertSQL(t *testing.T) {
+	compactSQL := func(sql string) string { return strings.Join(strings.Fields(sql), " ") }
+
+	sqlNoUpdate := compactSQL(buildCreateMaterializedViewLogPurgeInfoUpsertSQL(1, nil, false))
+	require.NotContains(t, sqlNoUpdate, "NEXT_PURGE_UNIX_SECONDS")
+	require.NotContains(t, sqlNoUpdate, "VALUES(NEXT_PURGE_UNIX_SECONDS)")
+
+	nextPurgeUnixSeconds := int64(1_767_312_305)
+	sqlWithValue := compactSQL(buildCreateMaterializedViewLogPurgeInfoUpsertSQL(1, &nextPurgeUnixSeconds, true))
+	require.Contains(t, sqlWithValue, "NEXT_PURGE_UNIX_SECONDS")
+	require.Contains(t, sqlWithValue, "VALUES(NEXT_PURGE_UNIX_SECONDS)")
+	require.Contains(t, sqlWithValue, "1767312305")
+
+	sqlWithNull := compactSQL(buildCreateMaterializedViewLogPurgeInfoUpsertSQL(1, nil, true))
+	require.Contains(t, sqlWithNull, "NEXT_PURGE_UNIX_SECONDS")
+	require.Contains(t, sqlWithNull, "VALUES(NEXT_PURGE_UNIX_SECONDS)")
+	require.Contains(t, sqlWithNull, ", NULL)")
+}
+
+func TestBuildCreateMaterializedViewImportSQL(t *testing.T) {
+	mvTblInfo := &model.TableInfo{
+		Name: ast.NewCIStr("mv"),
+		MaterializedView: &model.MaterializedViewInfo{
+			SQLContent: "select a, count(1) from t group by a",
+		},
+	}
+
+	sql, err := buildCreateMaterializedViewImportSQL("test", mvTblInfo, 0, "")
+	require.NoError(t, err)
+	require.Contains(t, sql, "IMPORT INTO `test`.`mv` FROM (")
+	require.Contains(t, sql, "WITH disable_precheck")
+	require.NotContains(t, strings.ToUpper(sql), "AS OF TIMESTAMP")
+
+	sql, err = buildCreateMaterializedViewImportSQL("test", mvTblInfo, 0, "100gib")
+	require.NoError(t, err)
+	require.Contains(t, sql, "WITH disable_precheck, disk_quota='100gib'")
+
+	sql, err = buildCreateMaterializedViewImportSQL("test", mvTblInfo, 12, "64gib")
+	require.NoError(t, err)
+	require.Contains(t, sql, "WITH disable_precheck, thread=12, disk_quota='64gib'")
+}
+
+func TestNormalizeMVDefinitionHintDBNames(t *testing.T) {
+	p := parser.New()
+	stmt, err := p.ParseOneStmt("select /*+ read_from_storage(tiflash[src]) hash_join_probe(src) */ a, count(1) from t src group by a", "", "")
+	require.NoError(t, err)
+
+	selectStmt := stmt.(*ast.SelectStmt)
+	normalizeMVDefinitionHintDBNames(selectStmt, ast.NewCIStr("test"))
+	sql, err := restoreNodeToCanonicalSQL(selectStmt)
+	require.NoError(t, err)
+	require.Contains(t, sql, "READ_FROM_STORAGE(TIFLASH[`test`.`src`])")
+	require.Contains(t, sql, "HASH_JOIN_PROBE(`test`.`src`)")
+}

@@ -1,0 +1,592 @@
+// Copyright 2023 PingCAP, Inc.
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+package stmtsummary
+
+import (
+	"bufio"
+	"context"
+	"fmt"
+	"os"
+	"path/filepath"
+	"testing"
+	"time"
+
+	"github.com/pingcap/tidb/pkg/config"
+	"github.com/pingcap/tidb/pkg/meta/model"
+	"github.com/pingcap/tidb/pkg/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser/auth"
+	"github.com/pingcap/tidb/pkg/types"
+	"github.com/pingcap/tidb/pkg/util"
+	"github.com/pingcap/tidb/pkg/util/set"
+	"github.com/stretchr/testify/require"
+)
+
+func TestTimeRangeOverlap(t *testing.T) {
+	require.False(t, timeRangeOverlap(1, 2, 3, 4))
+	require.False(t, timeRangeOverlap(3, 4, 1, 2))
+	require.True(t, timeRangeOverlap(1, 2, 2, 3))
+	require.True(t, timeRangeOverlap(1, 3, 2, 4))
+	require.True(t, timeRangeOverlap(2, 4, 1, 3))
+	require.True(t, timeRangeOverlap(1, 0, 3, 4))
+	require.True(t, timeRangeOverlap(1, 0, 2, 0))
+}
+
+func TestStmtFile(t *testing.T) {
+	filename := "tidb-statements-2022-12-27T16-21-20.245.log"
+
+	file, err := os.Create(filename)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, os.Remove(filename))
+	}()
+	_, err = file.WriteString("{\"begin\":1,\"end\":2}\n")
+	require.NoError(t, err)
+	_, err = file.WriteString("{\"begin\":3,\"end\":4}\n")
+	require.NoError(t, err)
+	require.NoError(t, file.Close())
+
+	f, err := openStmtFile(filename)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, f.file.Close())
+	}()
+	require.Equal(t, int64(1), f.begin)
+	require.Equal(t, time.Date(2022, 12, 27, 16, 21, 20, 245000000, time.Local).Unix(), f.end)
+
+	// Check if seek 0.
+	firstLine, err := util.ReadLine(bufio.NewReader(f.file), maxLineSize)
+	require.NoError(t, err)
+	require.Equal(t, `{"begin":1,"end":2}`, string(firstLine))
+}
+
+func TestStmtFileInvalidLine(t *testing.T) {
+	filename := "tidb-statements-2022-12-27T16-21-20.245.log"
+
+	file, err := os.Create(filename)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, os.Remove(filename))
+	}()
+	_, err = file.WriteString("invalid line\n")
+	require.NoError(t, err)
+	_, err = file.WriteString("{\"begin\":1,\"end\":2}\n")
+	require.NoError(t, err)
+	_, err = file.WriteString("{\"begin\":3,\"end\":4}\n")
+	require.NoError(t, err)
+	require.NoError(t, file.Close())
+
+	f, err := openStmtFile(filename)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, f.file.Close())
+	}()
+	require.Equal(t, int64(1), f.begin)
+	require.Equal(t, time.Date(2022, 12, 27, 16, 21, 20, 245000000, time.Local).Unix(), f.end)
+}
+
+type stmtDirEntryInfoError struct {
+	os.DirEntry
+}
+
+func (stmtDirEntryInfoError) Info() (os.FileInfo, error) {
+	return nil, os.ErrPermission
+}
+
+func TestStmtFiles(t *testing.T) {
+	t1 := time.Date(2022, 12, 27, 16, 21, 20, 245000000, time.Local)
+	filename1 := "tidb-statements-2022-12-27T16-21-20.245.log"
+	filename2 := "tidb-statements.log"
+
+	file, err := os.Create(filename1)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, os.Remove(filename1))
+	}()
+	_, err = file.WriteString(fmt.Sprintf("{\"begin\":%d,\"end\":%d}\n", t1.Unix()-760, t1.Unix()-750))
+	require.NoError(t, err)
+	_, err = file.WriteString(fmt.Sprintf("{\"begin\":%d,\"end\":%d}\n", t1.Unix()-10, t1.Unix()))
+	require.NoError(t, err)
+	require.NoError(t, file.Close())
+
+	file, err = os.Create(filename2)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, os.Remove(filename2))
+	}()
+	_, err = file.WriteString(fmt.Sprintf("{\"begin\":%d,\"end\":%d}\n", t1.Unix()-10, t1.Unix()))
+	require.NoError(t, err)
+	_, err = file.WriteString(fmt.Sprintf("{\"begin\":%d,\"end\":%d}\n", t1.Unix()+100, t1.Unix()+110))
+	require.NoError(t, err)
+	require.NoError(t, file.Close())
+
+	files, err := newStmtFiles(context.Background())
+	require.NoError(t, err)
+	defer files.close()
+	require.Len(t, files.files, 2)
+	require.Equal(t, filename1, files.files[0].path)
+	require.Equal(t, filename2, files.files[1].path)
+	require.Nil(t, files.files[0].file)
+	require.NotNil(t, files.files[1].file)
+
+	for _, tc := range []struct {
+		name                     string
+		rotateAfterEnumeration   bool
+		failRotatedEntryMetadata bool
+	}{
+		{name: "rotation follows directory snapshot", rotateAfterEnumeration: true},
+		{name: "rotation precedes directory snapshot"},
+		{name: "rotated entry metadata lookup fails", failRotatedEntryMetadata: true},
+	} {
+		t.Run("preserves current file when "+tc.name, func(t *testing.T) {
+			restore := config.RestoreFunc()
+			defer restore()
+
+			dir := t.TempDir()
+			currentPath := filepath.Join(dir, "tidb-statements.log")
+			rotatedPath := filepath.Join(dir, "tidb-statements-2022-12-27T16-21-20.245.log")
+			config.UpdateGlobal(func(conf *config.Config) {
+				conf.Instance.StmtSummaryFilename = currentPath
+			})
+
+			const oldRecord = `{"begin":1,"end":2,"digest":"old"}`
+			const newRecord = `{"begin":3,"end":4,"digest":"new"}`
+			require.NoError(t, os.WriteFile(currentPath, []byte(oldRecord+"\n"), 0o600))
+			rotate := func() error {
+				if err := os.Rename(currentPath, rotatedPath); err != nil {
+					return err
+				}
+				return os.WriteFile(currentPath, []byte(newRecord+"\n"), 0o600)
+			}
+
+			files, err := newStmtFilesWithReadDir(context.Background(), func(dir string) ([]os.DirEntry, error) {
+				if !tc.rotateAfterEnumeration {
+					if err := rotate(); err != nil {
+						return nil, err
+					}
+					entries, err := os.ReadDir(dir)
+					if err != nil {
+						return nil, err
+					}
+					if tc.failRotatedEntryMetadata {
+						for i, entry := range entries {
+							if filepath.Join(dir, entry.Name()) == rotatedPath {
+								entries[i] = stmtDirEntryInfoError{DirEntry: entry}
+							}
+						}
+					}
+					return entries, nil
+				}
+				entries, err := os.ReadDir(dir)
+				if err != nil {
+					return nil, err
+				}
+				if err := rotate(); err != nil {
+					return nil, err
+				}
+				return entries, nil
+			})
+			require.NoError(t, err)
+			expectedFiles := 1
+			if tc.failRotatedEntryMetadata {
+				expectedFiles = 2
+			}
+			require.Len(t, files.files, expectedFiles)
+			var snapshot *stmtFile
+			for _, file := range files.files {
+				if file.file != nil {
+					snapshot = file
+					break
+				}
+			}
+			require.NotNil(t, snapshot)
+			require.NotNil(t, snapshot.file)
+
+			columns := []*model.ColumnInfo{{Name: ast.NewCIStr(DigestStr)}}
+			ctx, cancel := context.WithCancel(context.Background())
+			rowsCh := make(chan [][]types.Datum, 2)
+			errCh := make(chan error, 2)
+			reader := &HistoryReader{
+				ctx:             ctx,
+				cancel:          cancel,
+				timeLocation:    time.Local,
+				columnFactories: makeColumnFactories(columns),
+				checker:         &stmtChecker{},
+				files:           files,
+				concurrent:      2,
+				rowsCh:          rowsCh,
+				errCh:           errCh,
+			}
+			reader.wg.Add(1)
+			go func() {
+				defer reader.wg.Done()
+				reader.scheduleTasks(rowsCh, errCh)
+			}()
+			defer func() {
+				require.NoError(t, reader.Close())
+			}()
+
+			rows := readAllRows(t, reader)
+			require.Len(t, rows, 1)
+			require.Equal(t, "old", rows[0][0].GetString())
+		})
+	}
+}
+
+func TestStmtChecker(t *testing.T) {
+	checker := &stmtChecker{}
+	require.True(t, checker.hasPrivilege(nil))
+
+	checker = &stmtChecker{
+		user: &auth.UserIdentity{Username: "user1"},
+	}
+	require.False(t, checker.hasPrivilege(nil))
+	require.False(t, checker.hasPrivilege(map[string]struct{}{"user2": {}}))
+	require.True(t, checker.hasPrivilege(map[string]struct{}{"user1": {}, "user2": {}}))
+
+	checker = &stmtChecker{}
+	require.True(t, checker.isDigestValid("digest1"))
+
+	checker = &stmtChecker{
+		digests: set.NewStringSet("digest2"),
+	}
+	require.False(t, checker.isDigestValid("digest1"))
+	require.True(t, checker.isDigestValid("digest2"))
+
+	checker = &stmtChecker{
+		digests: set.NewStringSet("digest1", "digest2"),
+	}
+	require.True(t, checker.isDigestValid("digest1"))
+	require.True(t, checker.isDigestValid("digest2"))
+
+	checker = &stmtChecker{}
+	require.True(t, checker.isTimeValid(1, 2))
+	require.False(t, checker.needStop(2))
+	require.False(t, checker.needStop(3))
+
+	checker = &stmtChecker{
+		timeRanges: []*StmtTimeRange{
+			{Begin: 1, End: 2},
+		},
+	}
+	require.True(t, checker.isTimeValid(1, 2))
+	require.False(t, checker.isTimeValid(3, 4))
+	require.False(t, checker.needStop(2))
+	require.True(t, checker.needStop(3))
+}
+
+func TestMemReader(t *testing.T) {
+	timeLocation, err := time.LoadLocation("Asia/Shanghai")
+	require.NoError(t, err)
+	columns := []*model.ColumnInfo{
+		{Name: ast.NewCIStr(DigestStr)},
+		{Name: ast.NewCIStr(ExecCountStr)},
+		{Name: ast.NewCIStr(IAExecCountStr)},
+	}
+
+	ss := NewStmtSummary4Test(3)
+	defer ss.Close()
+
+	ss.Add(GenerateStmtExecInfo4Test("digest1"))
+	ss.Add(GenerateStmtExecInfo4Test("digest1"))
+	ss.Add(GenerateStmtExecInfo4Test("digest2"))
+	ss.Add(GenerateStmtExecInfo4Test("digest2"))
+	ss.Add(GenerateStmtExecInfo4Test("digest3"))
+	ss.Add(GenerateStmtExecInfo4Test("digest3"))
+	ss.Add(GenerateStmtExecInfo4Test("digest4"))
+	ss.Add(GenerateStmtExecInfo4Test("digest4"))
+	ss.Add(GenerateStmtExecInfo4Test("digest5"))
+	ss.Add(GenerateStmtExecInfo4Test("digest5"))
+	reader := NewMemReader(ss, columns, "", timeLocation, nil, false, nil, nil)
+	rows := reader.Rows()
+	require.Len(t, rows, 4) // 3 rows + 1 other
+	require.Equal(t, len(reader.columnFactories), len(rows[0]))
+	for _, row := range rows {
+		require.Zero(t, row[2].GetInt64())
+	}
+	evicted := ss.Evicted()
+	require.Len(t, evicted, 3) // begin, end, count
+}
+
+func TestHistoryReader(t *testing.T) {
+	filename1 := "tidb-statements-2022-12-27T16-21-20.245.log"
+	filename2 := "tidb-statements.log"
+
+	file, err := os.Create(filename1)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, os.Remove(filename1))
+	}()
+	_, err = file.WriteString("{\"begin\":1672128520,\"end\":1672128530,\"digest\":\"digest1\",\"exec_count\":10,\"ia_remote_exec_count\":3}\n")
+	require.NoError(t, err)
+	_, err = file.WriteString("{\"begin\":1672129270,\"end\":1672129280,\"digest\":\"digest2\",\"exec_count\":20}\n")
+	require.NoError(t, err)
+	_, err = file.WriteString("{\"begin\":1672129270,\"end\":1672129280,\"digest\":\"evicted_digest\",\"exec_count\":99,\"evicted\":true}\n")
+	require.NoError(t, err)
+	require.NoError(t, file.Close())
+
+	file, err = os.Create(filename2)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, os.Remove(filename2))
+	}()
+	_, err = file.WriteString("{\"begin\":1672129270,\"end\":1672129280,\"digest\":\"digest2\",\"exec_count\":30}\n")
+	require.NoError(t, err)
+	_, err = file.WriteString("{\"begin\":1672129380,\"end\":1672129390,\"digest\":\"digest3\",\"exec_count\":40}\n")
+	require.NoError(t, err)
+	require.NoError(t, file.Close())
+
+	timeLocation, err := time.LoadLocation("Asia/Shanghai")
+	require.NoError(t, err)
+	columns := []*model.ColumnInfo{
+		{Name: ast.NewCIStr(DigestStr)},
+		{Name: ast.NewCIStr(ExecCountStr)},
+		{Name: ast.NewCIStr(IAExecCountStr)},
+	}
+
+	func() {
+		reader, err := NewHistoryReader(context.Background(), columns, "", timeLocation, nil, false, nil, nil, 2)
+		require.NoError(t, err)
+		defer reader.Close()
+		rows := readAllRows(t, reader)
+		require.Len(t, rows, 4)
+		for _, row := range rows {
+			require.Equal(t, len(columns), len(row))
+			if row[0].GetString() == "digest1" {
+				require.Equal(t, int64(3), row[2].GetInt64())
+			} else {
+				require.Zero(t, row[2].GetInt64())
+			}
+		}
+	}()
+
+	func() {
+		reader, err := NewHistoryReader(context.Background(), columns, "", timeLocation, nil, false, set.NewStringSet("digest2"), nil, 2)
+		require.NoError(t, err)
+		defer reader.Close()
+		rows := readAllRows(t, reader)
+		require.Len(t, rows, 2)
+		for _, row := range rows {
+			require.Equal(t, len(columns), len(row))
+		}
+	}()
+
+	func() {
+		reader, err := NewHistoryReader(context.Background(), columns, "", timeLocation, nil, false, nil, []*StmtTimeRange{
+			{Begin: 0, End: 1672128520 - 1},
+		}, 2)
+		require.NoError(t, err)
+		defer reader.Close()
+		rows := readAllRows(t, reader)
+		require.Len(t, rows, 0)
+	}()
+
+	func() {
+		reader, err := NewHistoryReader(context.Background(), columns, "", timeLocation, nil, false, nil, []*StmtTimeRange{
+			{Begin: 0, End: 1672129270 - 1},
+		}, 2)
+		require.NoError(t, err)
+		defer reader.Close()
+		rows := readAllRows(t, reader)
+		require.Len(t, rows, 1)
+		for _, row := range rows {
+			require.Equal(t, len(columns), len(row))
+		}
+	}()
+
+	func() {
+		reader, err := NewHistoryReader(context.Background(), columns, "", timeLocation, nil, false, nil, []*StmtTimeRange{
+			{Begin: 0, End: 1672129270},
+		}, 2)
+		require.NoError(t, err)
+		defer reader.Close()
+		rows := readAllRows(t, reader)
+		require.Len(t, rows, 3)
+		for _, row := range rows {
+			require.Equal(t, len(columns), len(row))
+		}
+	}()
+
+	func() {
+		reader, err := NewHistoryReader(context.Background(), columns, "", timeLocation, nil, false, nil, []*StmtTimeRange{
+			{Begin: 0, End: 1672129380},
+		}, 2)
+		require.NoError(t, err)
+		defer reader.Close()
+		rows := readAllRows(t, reader)
+		require.Len(t, rows, 4)
+		for _, row := range rows {
+			require.Equal(t, len(columns), len(row))
+		}
+	}()
+
+	func() {
+		reader, err := NewHistoryReader(context.Background(), columns, "", timeLocation, nil, false, nil, []*StmtTimeRange{
+			{Begin: 1672129270, End: 1672129380},
+		}, 2)
+		require.NoError(t, err)
+		defer reader.Close()
+		rows := readAllRows(t, reader)
+		require.Len(t, rows, 3)
+		for _, row := range rows {
+			require.Equal(t, len(columns), len(row))
+		}
+	}()
+
+	func() {
+		reader, err := NewHistoryReader(context.Background(), columns, "", timeLocation, nil, false, nil, []*StmtTimeRange{
+			{Begin: 1672129390, End: 0},
+		}, 2)
+		require.NoError(t, err)
+		defer reader.Close()
+		rows := readAllRows(t, reader)
+		require.Len(t, rows, 1)
+		for _, row := range rows {
+			require.Equal(t, len(columns), len(row))
+		}
+	}()
+
+	func() {
+		reader, err := NewHistoryReader(context.Background(), columns, "", timeLocation, nil, false, nil, []*StmtTimeRange{
+			{Begin: 1672129391, End: 0},
+		}, 2)
+		require.NoError(t, err)
+		defer reader.Close()
+		rows := readAllRows(t, reader)
+		require.Len(t, rows, 0)
+	}()
+
+	func() {
+		reader, err := NewHistoryReader(context.Background(), columns, "", timeLocation, nil, false, nil, []*StmtTimeRange{
+			{Begin: 0, End: 0},
+		}, 2)
+		require.NoError(t, err)
+		defer reader.Close()
+		rows := readAllRows(t, reader)
+		require.Len(t, rows, 4)
+		for _, row := range rows {
+			require.Equal(t, len(columns), len(row))
+		}
+	}()
+
+	t.Run("bounds open file descriptors", func(t *testing.T) {
+		restore := config.RestoreFunc()
+		defer restore()
+
+		dir := t.TempDir()
+		filename := filepath.Join(dir, "tidb-statements.log")
+		config.UpdateGlobal(func(conf *config.Config) {
+			conf.Instance.StmtSummaryFilename = filename
+		})
+
+		const fileCount = 32
+		base := time.Date(2022, 12, 27, 0, 0, 0, 0, time.Local)
+		for i := range fileCount {
+			begin := base.Add(time.Duration(i) * 2 * time.Hour)
+			end := begin.Add(10 * time.Minute)
+			path := filepath.Join(dir, fmt.Sprintf("tidb-statements-%s.log", end.Format(logFileTimeFormat)))
+			content := fmt.Sprintf("{\"begin\":%d,\"end\":%d,\"digest\":\"digest%d\",\"exec_count\":1}\n", begin.Unix(), end.Unix(), i)
+			require.NoError(t, os.WriteFile(path, []byte(content), 0o600))
+		}
+		currentBegin := base.Add(fileCount * 2 * time.Hour)
+		currentEnd := currentBegin.Add(10 * time.Minute)
+		currentContent := fmt.Sprintf("{\"begin\":%d,\"end\":%d,\"digest\":\"current\",\"exec_count\":1}\n", currentBegin.Unix(), currentEnd.Unix())
+		require.NoError(t, os.WriteFile(filename, []byte(currentContent), 0o600))
+
+		t.Run("matching files", func(t *testing.T) {
+			before, canCount := countOpenFileDescriptors()
+			reader, err := NewHistoryReader(context.Background(), columns, "", timeLocation, nil, false, nil, []*StmtTimeRange{
+				{Begin: base.Unix(), End: 0},
+			}, 2)
+			require.NoError(t, err)
+			if canCount {
+				after, _ := countOpenFileDescriptors()
+				require.LessOrEqual(t, after-before, 4)
+			}
+			require.NoError(t, reader.Close())
+		})
+
+		t.Run("rejected files", func(t *testing.T) {
+			before, canCount := countOpenFileDescriptors()
+			reader, err := NewHistoryReader(context.Background(), columns, "", timeLocation, nil, false, nil, []*StmtTimeRange{
+				{Begin: 0, End: base.Add(-time.Minute).Unix()},
+			}, 2)
+			require.NoError(t, err)
+			require.Empty(t, readAllRows(t, reader))
+			require.NoError(t, reader.Close())
+			if canCount {
+				after, _ := countOpenFileDescriptors()
+				require.LessOrEqual(t, after-before, 4)
+			}
+		})
+	})
+}
+
+func TestHistoryReaderInvalidLine(t *testing.T) {
+	filename := "tidb-statements.log"
+
+	file, err := os.Create(filename)
+	require.NoError(t, err)
+	defer func() {
+		require.NoError(t, os.Remove(filename))
+	}()
+	_, err = file.WriteString("invalid header line\n")
+	require.NoError(t, err)
+	_, err = file.WriteString("{\"begin\":1672129270,\"end\":1672129280,\"digest\":\"digest2\",\"exec_count\":30}\n")
+	require.NoError(t, err)
+	_, err = file.WriteString("corrupted line\n")
+	require.NoError(t, err)
+	_, err = file.WriteString("{\"begin\":1672129380,\"end\":1672129390,\"digest\":\"digest3\",\"exec_count\":40}\n")
+	require.NoError(t, err)
+	_, err = file.WriteString("invalid footer line")
+	require.NoError(t, err)
+	require.NoError(t, file.Close())
+
+	timeLocation, err := time.LoadLocation("Asia/Shanghai")
+	require.NoError(t, err)
+	columns := []*model.ColumnInfo{
+		{Name: ast.NewCIStr(DigestStr)},
+		{Name: ast.NewCIStr(ExecCountStr)},
+	}
+
+	reader, err := NewHistoryReader(context.Background(), columns, "", timeLocation, nil, false, nil, nil, 2)
+	require.NoError(t, err)
+	defer reader.Close()
+	rows := readAllRows(t, reader)
+	require.Len(t, rows, 2)
+	for _, row := range rows {
+		require.Equal(t, len(columns), len(row))
+	}
+}
+
+func readAllRows(t *testing.T, reader *HistoryReader) [][]types.Datum {
+	var results [][]types.Datum
+	for {
+		rows, err := reader.Rows()
+		require.NoError(t, err)
+		if rows == nil {
+			break
+		}
+		results = append(results, rows...)
+	}
+	return results
+}
+
+func countOpenFileDescriptors() (int, bool) {
+	entries, err := os.ReadDir("/proc/self/fd")
+	if err != nil {
+		return 0, false
+	}
+	return len(entries), true
+}
