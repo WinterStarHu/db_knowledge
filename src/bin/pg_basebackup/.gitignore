@@ -1,0 +1,7 @@
+/pg_basebackup
+/pg_createsubscriber
+/pg_receivewal
+/pg_recvlogical
+/polar_basebackup
+
+/tmp_check/
