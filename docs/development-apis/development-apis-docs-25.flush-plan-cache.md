@@ -1,0 +1,35 @@
+# FLUSH PLAN CACHE
+
+该语句用来清除租户的缓存。
+
+## 语法
+
+```sql
+ALTER SYSTEM FLUSH PLAN CACHE [tenant_list ] [GLOBAL];
+```
+
+>**说明**
+>在 OceanBase 数据库 V3.1.3 版本，只能在系统租户 sys 下才能执行该语句。
+
+## 参数解释
+
+| 参数 | 描述 |
+| --- | --- |
+| tenant_list | 用于指定租户范围。**说明**如果系统租户不指定 tenant_list 则表示清除所有租户的计划缓存。 |
+| GLOBAL | 为可选字段。如果不指定该参数，表示清空本机的计划缓存。反之，则表示清空该租户所在的所有服务器上的计划缓存。|
+
+## 示例
+
+- 清除所有计划缓存。
+
+     ```sql
+     obclient> ALTER SYSTEM FLUSH PLAN CACHE;
+     Query OK, 0 rows affected
+     ```
+
+- 清除指定租户计划缓存。
+
+     ```sql
+     obclient> ALTER SYSTEM FLUSH PLAN CACHE TENANT = 'test';
+     Query OK, 0 rows affected
+     ```
