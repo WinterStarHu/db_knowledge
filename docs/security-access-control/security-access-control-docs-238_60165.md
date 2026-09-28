@@ -1,0 +1,28 @@
+# From Pay-as-You-Go to Monthly Subscription
+
+> 来源: https://www.tencentcloud.com/document/product/238/60165
+
+TencentDB for SQL Server Release Notes and Announcements Release Notes Product Announcements User Guide Product Introduction Product Overview Product Architecture Strengths Use Cases Regions and AZs Major Version Lifecycle Description Features and Differences Instance Type Instance Specifications Storage Types Common Concepts Network Environment License Statement Purchase Guide Billing Overview Product Pricing Purchase Method Renewal Instructions Payment Overdue Refund From Pay-as-You-Go to Monthly Subscription Instance Adjustment Fees Description Local Backup Space Billing Cross-Region Backup Billing Description Database Audit Billing Overview Disk Additional I/O Performance Billing Description Viewing Bill Details Getting Started Creating TencentDB for SQL Server Instance Connecting to TencentDB for SQL Server Instance Managing TencentDB for SQL Server Instance Database Audit Overview Viewing Audit Instance List Enabling Audit Service Viewing Audit Log Log Shipping Modifying Audit Services Disabling Audit Service Authorizing Sub-User to Use Database Audit Operation Guide Constraints and Limits Usage Specifications and Suggestions Maintaining Instance Adjusting Instance Configuration Read-Only Instance Network and Security Account Management Database Management Data Security Parameter Configuration Monitoring and Alarms Backup and Restoration Log Management Publish-Subscribe SSIS Data Migration (New) Data Migration (Legacy) Data Synchronization (DTS) ﻿ Practical Tutorial tencentdb_ChangeLoginPassword Stored Procedure User Manual COS Bulk Insert Stored Procedure User Manual TencentDB for SQL Server Methods for Regular Maintenance TencentDB for SQL Server Optimization of Slow SQL How to Better Use Tempdb Cross-Account Backup Restoration Creating VPC for TencentDB for SQL Server Connecting Kingdee K/3 WISE to TencentDB for SQL Server Account Permissions and Permission Control Enabling and Disabling the CDC Feature Shrinking a Database API Documentation History Introduction API Category Making API Requests Sales and fee related APIs Instance Management related APIs Operation and maintenance management related APIs Network management related APIs Account management related APIs Database management related APIs Security group management related APIs Data security encryption related APIs Parameter configuration related APIs Extended Event related APIs Log management related APIs Read only instance management related APIs Publish and subscribe related APIs Backup related APIs Rollback related APIs Data migration (cold standby migration) related APIs SQL Server Integration Services (SSIS) related APIs Data migration (DTS old version) related APIs Data Types Error Codes FAQs FAQ Overview Purchase Consultation Billing and Purchase Connection and Network Account and Permission Backup and Rollback Data Migration Publish/Subscribe Read-Only Instance Version and Architecture Upgrade Disk Space and Specification Adjustment Monitoring and Alarms Log-Related Parameter Modification Features Performance, Space, and Memory-Related FAQs Service Agreement Service Level Agreement Terms of Service Performance Evaluation Performance Test Report Glossary Contact Us Documentation TencentDB for SQL Server Purchase Guide From Pay-as-You-Go to Monthly Subscription From Pay-as-You-Go to Monthly Subscription Download Focus Mode Font Size Last updated: 2026-03-20 16:11:48 AI-Translated TencentDB for SQL Server supports billing pattern conversion, currently only from pay-as-you-go to annual and yearly/monthly subscription. TencentDB for SQL Server enables this billing pattern conversion by generating renewal orders. Please make sure to pay the renewal order on time to ensure the conversion is successful.
+Note:
+Rest assured that access to your business will not be affected during the billing switch from pay-as-you-go to yearly/monthly subscription.
+Operation step
+1.
+Log in to the TencentDB for SQL Server console, select the desired instance in the Instance List, and in the Operations column, choose More > Switch to Yearly/Monthly Subscription.
+2.
+In the pop-up window, select the renewal duration, check the box to agree to the rules, and click OK.
+Note:
+You can also select auto-renewal to automate your subsequent renewals.
+Once a pay-as-you-go instance is converted to an annual and yearly/monthly subscription instance, it cannot be switched back to a pay-as-you-go instance.
+﻿ ﻿
+
+Previous Topic: Refund Next Topic: Instance Adjustment Fees Description Help and Support
+
+Was this page helpful?
+
+Yes No
+
+You can also Contact sales or Submit a Ticket for help.
+
+Help us improve! Rate your documentation experience in 5 mins.
+
+Start Now On This Page Operation step Search AllCurrent Product Search titles only Enter keywords to search documentation

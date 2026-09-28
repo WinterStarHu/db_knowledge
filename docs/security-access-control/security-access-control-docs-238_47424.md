@@ -1,0 +1,29 @@
+# Viewing Bill Details
+
+> 来源: https://www.tencentcloud.com/document/product/238/47424
+
+TencentDB for SQL Server Release Notes and Announcements Release Notes Product Announcements User Guide Product Introduction Product Overview Product Architecture Strengths Use Cases Regions and AZs Major Version Lifecycle Description Features and Differences Instance Type Instance Specifications Storage Types Common Concepts Network Environment License Statement Purchase Guide Billing Overview Product Pricing Purchase Method Renewal Instructions Payment Overdue Refund From Pay-as-You-Go to Monthly Subscription Instance Adjustment Fees Description Local Backup Space Billing Cross-Region Backup Billing Description Database Audit Billing Overview Disk Additional I/O Performance Billing Description Viewing Bill Details Getting Started Creating TencentDB for SQL Server Instance Connecting to TencentDB for SQL Server Instance Managing TencentDB for SQL Server Instance Database Audit Overview Viewing Audit Instance List Enabling Audit Service Viewing Audit Log Log Shipping Modifying Audit Services Disabling Audit Service Authorizing Sub-User to Use Database Audit Operation Guide Constraints and Limits Usage Specifications and Suggestions Maintaining Instance Adjusting Instance Configuration Read-Only Instance Network and Security Account Management Database Management Data Security Parameter Configuration Monitoring and Alarms Backup and Restoration Log Management Publish-Subscribe SSIS Data Migration (New) Data Migration (Legacy) Data Synchronization (DTS) ﻿ Practical Tutorial tencentdb_ChangeLoginPassword Stored Procedure User Manual COS Bulk Insert Stored Procedure User Manual TencentDB for SQL Server Methods for Regular Maintenance TencentDB for SQL Server Optimization of Slow SQL How to Better Use Tempdb Cross-Account Backup Restoration Creating VPC for TencentDB for SQL Server Connecting Kingdee K/3 WISE to TencentDB for SQL Server Account Permissions and Permission Control Enabling and Disabling the CDC Feature Shrinking a Database API Documentation History Introduction API Category Making API Requests Sales and fee related APIs Instance Management related APIs Operation and maintenance management related APIs Network management related APIs Account management related APIs Database management related APIs Security group management related APIs Data security encryption related APIs Parameter configuration related APIs Extended Event related APIs Log management related APIs Read only instance management related APIs Publish and subscribe related APIs Backup related APIs Rollback related APIs Data migration (cold standby migration) related APIs SQL Server Integration Services (SSIS) related APIs Data migration (DTS old version) related APIs Data Types Error Codes FAQs FAQ Overview Purchase Consultation Billing and Purchase Connection and Network Account and Permission Backup and Rollback Data Migration Publish/Subscribe Read-Only Instance Version and Architecture Upgrade Disk Space and Specification Adjustment Monitoring and Alarms Log-Related Parameter Modification Features Performance, Space, and Memory-Related FAQs Service Agreement Service Level Agreement Terms of Service Performance Evaluation Performance Test Report Glossary Contact Us Documentation TencentDB for SQL Server Purchase Guide Viewing Bill Details Viewing Bill Details Download Focus Mode Font Size Last updated: 2024-07-30 16:24:55 Overview This document describes how to view your TencentDB for SQL Server bills in the console. Specifically, you can view the available balance, transaction details, and fees incurred by TencentDB for SQL Server under your account and top up your account in Billing Center.
+Querying Bill
+1.
+Log in to the TencentDB for SQL Server console.
+2.
+Click Billing Center in the top-right corner to enter the Billing Center overview page.
+﻿
+3.
+On the left sidebar, select Bills > Bill Details.
+4.
+At the top of the Bill Viewing page, select the query time (monthly), select Resource Bill, and then select Product Name in the search box. Filter to find TencentDB for SQL Server and click OK to view the billing details for that product for the selected month in the list below.
+Note:
+To view the bill details of a single resource, click Bill Details in its Operation column.
+﻿ To download bill details, click ﻿ on the right.
+﻿ Previous Topic: Disk Additional I/O Performance Billing Description Next Topic: Creating TencentDB for SQL Server Instance Help and Support
+
+Was this page helpful?
+
+Yes No
+
+You can also Contact sales or Submit a Ticket for help.
+
+Help us improve! Rate your documentation experience in 5 mins.
+
+Start Now On This Page Overview Querying Bill Search AllCurrent Product Search titles only Enter keywords to search documentation
