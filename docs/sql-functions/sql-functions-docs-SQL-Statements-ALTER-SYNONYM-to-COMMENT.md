@@ -1,0 +1,18 @@
+# SQL Statements: ALTER SYNONYM to COMMENT
+
+This chapter contains the following SQL statements:
+- ALTER SYNONYM
+- ALTER SYSTEM
+- ALTER TABLE
+- ALTER TABLESPACE
+- ALTER TABLESPACE SET
+- ALTER TRIGGER
+- ALTER TYPE
+- ALTER USER
+- ALTER VIEW
+- ANALYZE
+- ASSOCIATE STATISTICS
+- AUDIT (Traditional Auditing)
+- AUDIT (Unified Auditing)
+- CALL
+- COMMENT

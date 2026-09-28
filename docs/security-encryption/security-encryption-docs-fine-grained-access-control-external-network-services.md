@@ -1,0 +1,8 @@
+# About Fine-Grained Access Control to External Network Services
+
+Oracle Application Security access control lists (ACL) can implement fine-grained access control to external network services.
+This guide explains how to configure the access control for database users and roles by using the `DBMS_NETWORK_ACL_ADMIN` PL/SQL package.
+This feature enhances security for network connections because it restricts the external network hosts that a database user can connect to using the PL/SQL network utility packages `UTL_TCP`, `UTL_SMTP`, `UTL_MAIL`, `UTL_HTTP`, and `UTL_INADDR`; the `DBMS_LDAP` and `DBMS_DEBUG_JDWP` PL/SQL packages; and the `HttpUriType` type. Otherwise, an intruder who gained access to the database could maliciously attack the network, because, by default, the PL/SQL utility packages are created with the `EXECUTE` privilege granted to `PUBLIC` users. These PL/SQL network utility packages, and the `DBMS_NETWORK_ACL_ADMIN` and `DBMS_NETWORK_ACL_UTILITY` packages, support both IP Version 4 (IPv4) and IP Version 6 (IPv6) addresses. This guide explains how to manage access control to both versions. For detailed information about how the IPv4 and IPv6 notation works with Oracle Database, see *Oracle Database Net Services Administrator’s Guide*.
+Be aware that outbound Secure Sockets Layer (SSL) connections with `UTL_HTTP` cannot use the default trust store. You must create an Oracle wallet to hold the trust certificates.
+## Related Topics
+  - Tutorial: Adding an Email Alert to a Fine-Grained Audit Policy for an example of configuring access control to external network services for email alerts

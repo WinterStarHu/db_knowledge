@@ -1,0 +1,9 @@
+# How Procedure Privileges Affect Invoker’s Rights
+
+An invoker’s rights procedure executes with all of the invoker’s privileges.
+Oracle Database enables the privileges that were granted to the invoker through any of the invoker’s enabled roles to take effect, unless a definer’s rights procedure calls the invoker’s rights procedure directly or indirectly. A user of an invoker’s rights procedure must have privileges (granted to the user either directly or through a role) on objects that the procedure accesses through external references that are resolved in the schema of the invoker. When the invoker runs an invoker’s rights procedure, this user temporarily has *all* of the privileges of the invoker.
+The invoker must have privileges at run time to access program references embedded in DML statements or dynamic SQL statements, because they are effectively recompiled at run time.
+For all other external references, such as direct PL/SQL function calls, Oracle Database checks the privileges of the owner at compile time, but does not perform a run-time check. Therefore, the user of an invoker’s rights procedure does not need privileges on external references outside DML or dynamic SQL statements. Therefore, the developer of an invoker’s rights procedure only needs to grant privileges on the procedure itself, not on all objects directly referenced by the invoker’s rights procedure.
+You can create a software bundle that consists of multiple program units, some with definer’s rights and others with invoker’s rights, and restrict the program entry points *(controlled step-in)*. A user who has the privilege to run an entry-point procedure can also execute internal program units indirectly, but cannot directly call the internal programs. For very precise control over query processing, you can create a PL/SQL package specification with explicit cursors.
+## Related Topics
+  - Controlling Invoker’s Rights Privileges for Procedure Calls and View Access

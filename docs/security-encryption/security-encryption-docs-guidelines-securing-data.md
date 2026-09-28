@@ -1,0 +1,13 @@
+# Guidelines for Securing Data
+
+Oracle provides guidelines for securing data on your system.
+****
+  - Limit the number of operating system users.
+  - Limit the privileges of the operating system accounts (administrative, root-privileged, or database administrative) on the Oracle Database host computer to the least privileges required for a user to perform necessary tasks.
+  - Restrict the ability to modify the default file and directory permissions for the Oracle Database home (installation) directory or its contents. Even privileged operating system users and the Oracle owner should not modify these permissions, unless instructed otherwise by Oracle.
+**
+  - Restrict symbolic links. Ensure that when you provide a path or file to the database, neither the file nor any part of the path is modifiable by an untrusted user. The file and all components of the path should be owned by the database administrator or trusted account, such as root. This recommendation applies to all types of log files, trace files, external tables, BFILE data types, and so on.
+**** **
+- Encrypt sensitive data and all backup media that contains database files. According to common regulatory compliance requirements, you must encrypt sensitive data such as credit card numbers and passwords. When you delete sensitive data from the database, encrypted data does not linger in data blocks, operating system files, or sectors on disk. In most cases, you may want to use Transparent Data Encryption to encrypt your sensitive data. See Oracle Database Advanced Security Guide for more information. See also Security Problems That Encryption Does Not Solve for when you should not encrypt data.
+**** ****
+- For Oracle Automatic Storage Management (Oracle ASM) environments on Linux and UNIX systems, use Oracle ASM File Access Control to restrict access to the Oracle ASM disk groups. If you use different operating system users and groups for Oracle Database installations, then you can configure Oracle ASM File Access Control to restrict the access to files in Oracle ASM disk groups to only authorized users. For example, a database administrator would only be able to access the data files for the databases he or she manages. This administrator would not be able to see or overwrite the data files belonging (or used by) other databases. For more information about managing Oracle ASM File Access Control for disk groups, see Oracle Automatic Storage Management Administrator’s Guide. For information about the various privileges required for multiple software owners, see also Oracle Automatic Storage Management Administrator’s Guide.
