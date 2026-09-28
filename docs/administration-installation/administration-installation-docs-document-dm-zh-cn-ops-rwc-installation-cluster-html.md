@@ -1,0 +1,673 @@
+# 读写分离集群安装部署 | 达梦技术文档
+
+> 来源: https://eco.dameng.com/document/dm/zh-cn/ops/RWC-installation-cluster.html
+
+读写分离集群安装部署 | 达梦技术文档
+
+快速上手运维指南应用开发指南SQL 开发指南常见问题产品手册
+
+案例 问答 一体机 专栏
+
+数据库规范化部署
+
+安装前准备工作 单机安装部署 数据守护集群安装部署 读写分离集群安装部署 共享存储集群安装部署 新一代分布式集群安装部署
+
+数据库运维监控
+
+系统资源监控 实例状态监控 运维监控工具
+
+数据库健康检查
+
+系统健康检查 实例健康检查 集群健康检查
+
+数据库备份还原
+
+物理备份还原 逻辑备份还原 实战案例
+
+性能诊断与优化
+
+性能诊断 性能优化
+
+故障诊断与排除
+
+SQL 类故障 实例故障 人为操作故障
+
+读写分离集群安装部署
+
+一、安装前准备
+
+1.1 硬件环境建议
+
+读写分离集群安装部署前需要额外注意网络环境和磁盘 IO 配置情况，其他环境配置项建议请参考安装前准备工作。
+
+1.1.1 网络环境
+
+心跳网络对 mal 通讯系统的影响非常大，如果网络丢包或者延迟较大，则会严重影响 mal 系统的处理能力，从而导致整个集群出现响应服务请求慢的情况。为确保集群的稳定性，网络配置如下：
+
+使用千兆或千兆以上网络，同城机房需确保 mal 网络延迟小于 1ms；
+
+集群间的心跳网络需同步数据，建议尽量使用两个交换机构建内网，以实现冗余和负载均衡；
+
+建议服务器采用两个网卡绑定为一个逻辑网卡来使用（比如 bond 方式）。
+
+1.1.2 磁盘 IO
+
+磁盘 IO 的读写速率会极大影响系统性能和用户体验。因此在进行集群安装部署前，应测试 IO 性能能否满足系统功能和性能需求。
+
+IO 性能指标与系统的并发数、热点数据等因素往往密切相关。在读写分离集群，尤其生产系统中，推荐使用高性能 SSD 磁盘，以获得更佳性能，保证集群数据的实时同步。
+
+需要注意主备机磁盘 IO 的配置应该接近，避免因主备磁盘 io 差异大造成备库拖慢主库和主库卡顿。
+
+1.2 集群规划
+
+集群规划 A 机器
+
+B 机器
+
+C 机器
+
+业务 IP
+172.16.1.1
+
+172.16.1.2
+
+172.16.1.3
+
+心跳 IP
+192.168.1.1
+
+192.168.1.2
+
+192.168.1.3
+
+实例名 GRP1_RWW_01
+
+GRP1_RWW_02
+
+GRP1_RWW_03
+
+实例端口 5236
+
+5236
+
+5236
+
+MAL 端口 5336
+
+5337
+
+5338
+
+MAL 守护进程端口 5436
+
+5437
+
+5438
+
+守护进程端口 5536
+
+5537
+
+5538
+
+OGUID 45331
+
+45331
+
+45331
+
+守护组 GRP1
+
+GRP1
+
+GRP1
+
+安装目录 /home/dmdba/dmdbms
+
+/home/dmdba/dmdbms
+
+/home/dmdba/dmdbms
+
+实例目录 /data/dmdata
+
+/data/dmdata
+
+/data/dmdata
+
+归档上限 51200
+
+51200
+
+51200
+
+确认监视器 IP 为 192.168.1.4。
+
+说明：读写分离集群与数据守护集群架构基本类似，但在搭建过程中，归档类型和 dm_svc.conf 配置文件等存在一定区别。此外，搭建过程中具体规划及部署方式以现场环境为准。
+
+1.3 集群架构
+
+搭建的读写分离集群架构如下图：
+
+1.4 切换模式说明
+
+故障切换方式 dmarch.ini dmwatcher.ini dmmonitor.ini 监视器要求
+
+故障手动切换 ARCH_WAIT_APP LY=0 DW_MODE= MANUAL MON_DW_CON FIRM=0 1、手动切换：集群各节点的 bin 目录中，存放非确认监视器配置文件。
+
+故障自动切换 ARCH_WAIT_APP LY= 1 DW_MODE= AUTO MON_DW_CON FIRM=1 1、手动切换：集群各节点的 bin 目录中，存放非确认监视器配置文件。
+2、自动切换：在确认监视器上（非集群节点），存放确认监视器配置文件，并注册后台自启服务。
+
+ARCH_WAIT_APPLY 参数，设置为 0：高性能模式；设置为 1：事务一致模式。
+
+故障手动切换情境下 ARCH_WAIT_APPLY 只能为 0。故障自动切换情境下 ARCH_WAIT_APPLY 可以为 0，也可以为 1。
+
+ARCH_WAIT_APPLY 参数设置的判断依据为业务是否要查询备机最新数据。如果需要，则配置为 1（较大性能衰减）；如果不需要，则配置为 0。
+
+二、集群搭建
+
+2.1 配置 A 机器
+
+2.1.1 初始化实例并备份数据
+
+初始化实例
+
+[dmdba@~]$ /home/dmdba/dmdbms/bin/dminit PATH=/data/dmdata/ INSTANCE_NAME=GRP1_RWW_01 PAGE_SIZE=32 EXTENT_SIZE=32 LOG_SIZE=2048 SYSDBA_PWD=****** SYSAUDITOR_PWD=******
+##SYSDBA_PWD 和 SYSAUDITOR_PWD 为配置数据库 SYSDBA 用户和 SYSAUDITOR 用户的登录密码，需要用户自定义配置，且需保证一定的密码强度。
+
+注意
+
+强烈建议用户在首次安装数据库初始化实例时，立即修改数据库系统用户的初始密码，并设置一定的密码强度，以保障数据安全性。
+
+启动服务
+
+[dmdba@~]$ /home/dmdba/dmdbms/bin/dmserver /data/dmdata/DAMENG/dm.ini
+
+开启归档
+
+[dmdba@~]$ /home/dmdba/dmdbms/bin/disql SYSDBA/*****@172.16.1.1:5236
+
+SQL> ALTER DATABASE MOUNT;
+SQL> ALTER DATABASE ARCHIVELOG;
+SQL> ALTER DATABASE ADD ARCHIVELOG 'DEST=/data/dmdata/arch, TYPE=LOCAL, FILE_SIZE=1024, SPACE_LIMIT=51200';
+SQL> ALTER DATABASE OPEN;
+
+备份数据
+
+SQL> BACKUP DATABASE BACKUPSET '/data/dmdata/bak/BACKUP_FILE';
+
+修改 dm.ini
+
+SQL> SP_SET_PARA_VALUE (2,'PORT_NUM',5236);
+SQL> SP_SET_PARA_VALUE (2,'DW_INACTIVE_INTERVAL',60);
+SQL> SP_SET_PARA_VALUE (2,'ALTER_MODE_STATUS',0);
+SQL> SP_SET_PARA_VALUE (2,'ENABLE_OFFLINE_TS',2);
+SQL> SP_SET_PARA_VALUE (2,'MAL_INI',1);
+SQL> SP_SET_PARA_VALUE (2,'RLOG_SEND_APPLY_MON',64);
+
+关闭前台实例服务，确保正常停库。
+
+2.1.2 修改 dmarch.ini
+
+[dmdba@~]$ vi /data/dmdata/DAMENG/dmarch.ini
+
+ARCH_WAIT_APPLY            = 1 [ARCHIVE_LOCAL] ARCH_TYPE                = LOCAL  #本地归档类型 ARCH_DEST                = /data/dmdata/arch/  #本地归档存放路径 ARCH_FILE_SIZE           = 1024  #单个归档大小，单位 MB ARCH_SPACE_LIMIT         = 51200  #归档上限，单位 MB
+
+[ARCHIVE_REALTIME1] ARCH_TYPE                = REALTIME  #实时归档类型 ARCH_DEST                = GRP1_RWW_02  #实时归档目标实例名
+
+[ARCHIVE_REALTIME2] ARCH_TYPE                = REALTIME  #实时归档类型 ARCH_DEST                = GRP1_RWW_03  #实时归档目标实例名
+
+2.1.3 创建 dmmal.ini
+
+[dmdba@~]$ vi /data/dmdata/DAMENG/dmmal.ini
+
+MAL_CHECK_INTERVAL         = 10  #MAL 链路检测时间间隔 MAL_CONN_FAIL_INTERVAL     = 10  #判定 MAL 链路断开的时间 MAL_TEMP_PATH              = /data/dmdata/malpath/  #临时文件目录 MAL_BUF_SIZE               = 512  #单个 MAL 缓存大小，单位 MB MAL_SYS_BUF_SIZE           = 2048  #MAL 总大小限制，单位 MB MAL_COMPRESS_LEVEL         = 0  #MAL 消息压缩等级，0 表示不压缩
+
+[MAL_INST1] MAL_INST_NAME            = GRP1_RWW_01  #实例名，和 dm.ini 的 INSTANCE_NAME 一致 MAL_HOST                 = 192.168.1.1  #MAL 系统监听 TCP 连接的 IP 地址 MAL_PORT                 = 5336  #MAL 系统监听 TCP 连接的端口 MAL_INST_HOST            = 172.16.1.1  #实例的对外服务 IP 地址 MAL_INST_PORT            = 5236  #实例对外服务端口，和 dm.ini 的 PORT_NUM 一致 MAL_DW_PORT              = 5436  #实例对应的守护进程监听 TCP 连接的端口 MAL_INST_DW_PORT         = 5536  #实例监听守护进程 TCP 连接的端口
+
+[MAL_INST2] MAL_INST_NAME            = GRP1_RWW_02 MAL_HOST                 = 192.168.1.2 MAL_PORT                 = 5337 MAL_INST_HOST            = 172.16.1.2 MAL_INST_PORT            = 5236 MAL_DW_PORT              = 5437 MAL_INST_DW_PORT         = 5537
+
+[MAL_INST3] MAL_INST_NAME            = GRP1_RWW_03 MAL_HOST                 = 192.168.1.3 MAL_PORT                 = 5338 MAL_INST_HOST            = 172.16.1.3 MAL_INST_PORT            = 5236 MAL_DW_PORT              = 5438 MAL_INST_DW_PORT         = 5538
+
+2.1.4 创建 dmwatcher.ini
+
+[dmdba@~]$ vi /data/dmdata/DAMENG/dmwatcher.ini
+
+[GRP1] DW_TYPE                  = GLOBAL  #全局守护类型 DW_MODE                  = MANUAL  #MANUAL：故障手切 AUTO：故障自切 DW_ERROR_TIME            = 20  #远程守护进程故障认定时间 INST_ERROR_TIME          = 20  #本地实例故障认定时间 INST_RECOVER_TIME        = 60  #主库守护进程启动恢复的间隔时间 INST_OGUID               = 45331  #守护系统唯一 OGUID 值 INST_INI                 = /data/dmdata/DAMENG/dm.ini  #dm.ini 文件路径 INST_AUTO_RESTART        = 1  #打开实例的自动启动功能 INST_STARTUP_CMD         = /home/dmdba/dmdbms/bin/dmserver  #命令行方式启动 RLOG_SEND_THRESHOLD      = 0  #指定主库发送日志到备库的时间阈值，默认关闭 RLOG_APPLY_THRESHOLD     = 0  #指定备库重演日志的时间阈值，默认关闭
+
+2.1.5 拷贝备份文件
+
+##拷贝备份文件到 B 机器
+[dmdba@~]$ scp -r /data/dmdata/bak/BACKUP_FILE dmdba@192.168.1.2:/data/dmdata/DAMENG/bak
+
+##拷贝备份文件到 C 机器
+[dmdba@~]$ scp -r /data/dmdata/bak/BACKUP_FILE dmdba@192.168.1.3:/data/dmdata/DAMENG/bak
+
+2.1.6 注册服务
+
+[root@~]# /home/dmdba/dmdbms/script/root/dm_service_installer.sh -t dmserver -p GRP1_RWW_01 -dm_ini /data/dmdata/DAMENG/dm.ini -m mount
+
+[root@~]# /home/dmdba/dmdbms/script/root/dm_service_installer.sh -t dmwatcher -p Watcher -watcher_ini /data/dmdata/DAMENG/dmwatcher.ini
+
+若要删除自启，可利用如下方式：
+
+[root@~]# /home/dmdba/dmdbms/script/root/dm_service_uninstaller.sh -n DmServiceGRP1_RWW_01
+
+[root@~]# /home/dmdba/dmdbms/script/root/dm_service_uninstaller.sh -n DmWatcherServiceWatcher
+
+2.2 配置 B 机器
+
+2.2.1 初始化实例
+
+[dmdba@~]$ /home/dmdba/dmdbms/bin/dminit PATH=/data/dmdata/ INSTANCE_NAME=GRP1_RWW_02 PAGE_SIZE=32 EXTENT_SIZE=32 LOG_SIZE=2048 SYSDBA_PWD=****** SYSAUDITOR_PWD=******
+
+2.2.2 恢复数据
+
+[dmdba@~]$ /home/dmdba/dmdbms/bin/dmrman CTLSTMT="RESTORE DATABASE '/data/dmdata/DAMENG/dm.ini' FROM BACKUPSET '/data/dmdata/bak/BACKUP_FILE'"
+
+[dmdba@~]$ /home/dmdba/dmdbms/bin/dmrman CTLSTMT="RECOVER DATABASE '/data/dmdata/DAMENG/dm.ini' FROM BACKUPSET '/data/dmdata/bak/BACKUP_FILE'"
+
+[dmdba@~]$ /home/dmdba/dmdbms/bin/dmrman CTLSTMT="RECOVER DATABASE '/data/dmdata/DAMENG/dm.ini' UPDATE DB_MAGIC"
+
+2.2.3 替换 dmarch.ini
+
+[dmdba@~]$ vi /data/dmdata/DAMENG/dmarch.ini
+
+ARCH_WAIT_APPLY            = 1
+
+[ARCHIVE_LOCAL] ARCH_TYPE                = LOCAL  #本地归档类型 ARCH_DEST                = /data/dmdata/arch/  #本地归档存放路径 ARCH_FILE_SIZE           = 1024  #单个归档大小，单位 MB ARCH_SPACE_LIMIT         = 51200  #归档上限，单位 MB
+
+[ARCHIVE_REALTIME1] ARCH_TYPE                = REALTIME  #实时归档类型 ARCH_DEST                = GRP1_RWW_01  #实时归档目标实例名
+
+[ARCHIVE_REALTIME2] ARCH_TYPE                = REALTIME  #实时归档类型 ARCH_DEST                = GRP1_RWW_03  #实时归档目标实例名
+
+2.2.4 配置 dm.ini、dmmal.ini 和 dmwatcher.ini
+
+配置 dm.ini
+
+在 B 机器上配置备库的实例名为 GRP1_RWW_02，dm.ini 参数修改如下：
+
+INSTANCE_NAME  = GRP1_RWW_02 PORT_NUM = 5236                               #数据库实例监听端口 DW_INACTIVE_INTERVAL = 60              #接收守护进程消息超时时间 ALTER_MODE_STATUS = 0                     #不允许手工方式修改实例模式/状态/OGUID ENABLE_OFFLINE_TS  = 2                      #不允许备库 OFFLINE 表空间 MAL_INI = 1                                           #打开 MAL 系统 ARCH_INI = 1                                         #打开归档配置 RLOG_SEND_APPLY_MON = 64             #统计最近 64 次的日志重演信息
+
+配置 dmmal.ini 和 dmwatcher.ini
+
+B 机器里 dmmal.ini、dmwatcher.ini 与 A 机器 GRP1_RWW_01 的 dmmal.ini、dmwatcher.ini 相同，参照 A 机器 dmmal.ini、dmwatcher.ini 文件进行配置。
+
+2.2.5 注册服务
+
+[root@~]# /home/dmdba/dmdbms/script/root/dm_service_installer.sh -t dmserver -p GRP1_RWW_02 -dm_ini /data/dmdata/DAMENG/dm.ini -m mount
+
+[root@~]# /home/dmdba/dmdbms/script/root/dm_service_installer.sh -t dmwatcher -p Watcher -watcher_ini /data/dmdata/DAMENG/dmwatcher.ini
+
+若要删除自启，可利用如下方式：
+
+[root@~]# /home/dmdba/dmdbms/script/root/dm_service_uninstaller.sh -n DmServiceGRP1_RWW_02
+
+[root@~]# /home/dmdba/dmdbms/script/root/dm_service_uninstaller.sh -n DmWatcherServiceWatcher
+
+2.3 配置 C 机器
+
+2.3.1 初始化实例
+
+[dmdba@~]$ /home/dmdba/dmdbms/bin/dminit PATH=/data/dmdata/ INSTANCE_NAME=GRP1_RWW_03 PAGE_SIZE=32 EXTENT_SIZE=32 LOG_SIZE=2048 SYSDBA_PWD=****** SYSAUDITOR_PWD=******
+
+2.3.2 恢复数据
+
+[dmdba@~]$ /home/dmdba/dmdbms/bin/dmrman CTLSTMT="RESTORE DATABASE '/data/dmdata/DAMENG/dm.ini' FROM BACKUPSET '/data/dmdata/bak/BACKUP_FILE'"
+
+[dmdba@~]$ /home/dmdba/dmdbms/bin/dmrman CTLSTMT="RECOVER DATABASE '/data/dmdata/DAMENG/dm.ini' FROM BACKUPSET '/data/dmdata/bak/BACKUP_FILE'"
+
+[dmdba@~]$ /home/dmdba/dmdbms/bin/dmrman CTLSTMT="RECOVER DATABASE '/data/dmdata/DAMENG/dm.ini' UPDATE DB_MAGIC"
+
+2.3.3 替换 dmarch.ini
+
+[dmdba@~]$ vi /data/dmdata/DAMENG/dmarch.ini
+
+ARCH_WAIT_APPLY            = 1
+
+[ARCHIVE_LOCAL] ARCH_TYPE                = LOCAL  #本地归档类型 ARCH_DEST                = /data/dmdata/arch/  #本地归档存放路径 ARCH_FILE_SIZE           = 1024  #单个归档大小，单位 MB ARCH_SPACE_LIMIT         = 51200  #归档上限，单位 MB
+
+[ARCHIVE_REALTIME1] ARCH_TYPE                = REALTIME  #实时归档类型 ARCH_DEST                = GRP1_RWW_01  #实时归档目标实例名
+
+[ARCHIVE_REALTIME2] ARCH_TYPE                = REALTIME  #实时归档类型 ARCH_DEST                = GRP1_RWW_02  #实时归档目标实例名
+
+2.3.4 配置 dm.ini、dmmal.ini 和 dmwatcher.ini
+
+配置 dm.ini
+
+在 C 机器上配置备库的实例名为 GRP1_RWW_03，dm.ini 参数修改如下：
+
+INSTANCE_NAME  = GRP1_RWW_03 PORT_NUM = 5236                               #数据库实例监听端口 DW_INACTIVE_INTERVAL = 60              #接收守护进程消息超时时间 ALTER_MODE_STATUS = 0                     #不允许手工方式修改实例模式/状态/OGUID ENABLE_OFFLINE_TS  = 2                      #不允许备库 OFFLINE 表空间 MAL_INI = 1                                           #打开 MAL 系统 ARCH_INI = 1                                         #打开归档配置 RLOG_SEND_APPLY_MON = 64             #统计最近 64 次的日志重演信息
+
+配置 dmmal.ini 和 dmwatcher.ini
+
+C 机器里 dmmal.ini、dmwatcher.ini 与 A 机器 GRP1_RWW_01 的 dmmal.ini、dmwatcher.ini 相同，参照 A 机器 dmmal.ini、dmwatcher.ini 文件进行配置。
+
+2.3.5 注册服务
+
+[root@~]# /home/dmdba/dmdbms/script/root/dm_service_installer.sh -t dmserver -p GRP1_RWW_03 -dm_ini /data/dmdata/DAMENG/dm.ini -m mount
+
+[root@~]# /home/dmdba/dmdbms/script/root/dm_service_installer.sh -t dmwatcher -p Watcher -watcher_ini /data/dmdata/DAMENG/dmwatcher.ini
+
+若要删除自启，可利用如下方式：
+
+[root@~]# /home/dmdba/dmdbms/script/root/dm_service_uninstaller.sh -n DmServiceGRP1_RWW_03
+
+[root@~]# /home/dmdba/dmdbms/script/root/dm_service_uninstaller.sh -n DmWatcherServiceWatcher
+
+2.4 配置监视器
+
+手动切换：集群各节点的 bin 目录中，存放非确认监视器配置文件。
+
+自动切换：在确认监视器上（非集群节点），存放确认监视器配置文件，并注册后台自启服务。
+
+2.4.1 创建 dmmonitor.ini
+
+[dmdba@~]$ vi /home/dmdba/dmdbms/bin/dmmonitor.ini
+
+MON_DW_CONFIRM             = 0  #0：非确认（故障手切） 1：确认（故障自切） MON_LOG_PATH               = ../log  #监视器日志文件存放路径 MON_LOG_INTERVAL           = 60  #每隔 60s 定时记录系统信息到日志文件 MON_LOG_FILE_SIZE          = 512  #单个日志大小，单位 MB MON_LOG_SPACE_LIMIT        = 2048  #日志上限，单位 MB
+
+[GRP1] MON_INST_OGUID           = 45331  #组 GRP1 的唯一 OGUID 值 MON_DW_IP                = 192.168.1.1:5436  #IP 对应 MAL_HOST，PORT 对应 MAL_DW_PORT MON_DW_IP                = 192.168.1.2:5437 MON_DW_IP                = 192.168.1.3:5438
+
+2.4.2 注册服务（选做）
+
+[root@~]# /home/dmdba/dmdbms/script/root/dm_service_installer.sh -t dmmonitor -p Monitor -monitor_ini /home/dmdba/dmdbms/bin/dmmonitor.ini
+
+若要删除自启，可利用如下方式：
+
+[root@~]# /home/dmdba/dmdbms/script/root/dm_service_uninstaller.sh -n DmMonitorServiceMonitor
+
+2.4.3 监视器使用
+
+命令 含义
+
+list 查看守护进程的配置信息
+
+show global info 查看所有实例组的信息
+
+tip 查看系统当前运行状态
+
+login 登录监视器
+
+logout 退出登录
+
+choose switchover GRP1 主机正常：查看可切换为主机的实例列表
+
+switchover GRP1.实例名 主机正常：使用指定组的指定实例，切换为主机
+
+choose takeover GRP1 主机故障：查看可切换为主机的实例列表
+
+takeover GRP1.实例名 主机故障：使用指定组的指定实例，切换为主机
+
+choose takeover force GRP1 强制切换：查看可切换为主机的实例列表
+
+takeover force GRP1.实例名 强制切换：使用指定组的指定实例，切换为主机
+
+2.5 启动服务及查看信息
+
+2.5.1 启动数据库并修改参数
+
+##A 机器
+[dmdba@~]$ /home/dmdba/dmdbms/bin/DmServiceGRP1_RWW_01 start [dmdba@~]$ /home/dmdba/dmdbms/bin/disql SYSDBA/*****@172.16.1.1:5236 SQL> SP_SET_OGUID(45331);
+SQL> ALTER DATABASE PRIMARY;
+
+##B 机器
+[dmdba@~]$ /home/dmdba/dmdbms/bin/DmServiceGRP1_RWW_02 start [dmdba@~]$ /home/dmdba/dmdbms/bin/disql SYSDBA/*****@172.16.1.2:5236 SQL> SP_SET_OGUID(45331);
+SQL> ALTER DATABASE STANDBY;
+
+##C 机器
+[dmdba@~]$ /home/dmdba/dmdbms/bin/DmServiceGRP1_RWW_03 start [dmdba@~]$ /home/dmdba/dmdbms/bin/disql SYSDBA/*****@172.16.1.3:5236 SQL> SP_SET_OGUID(45331);
+SQL> ALTER DATABASE STANDBY;
+
+2.5.2 启动守护进程
+
+##A/B/C机器
+[dmdba@~]$ /home/dmdba/dmdbms/bin/DmWatcherServiceWatcher start
+
+2.5.3 启动监视器
+
+##前台启动
+[dmdba@~]$ /home/dmdba/dmdbms/bin/dmmonitor /home/dmdba/dmdbms/bin/dmmonitor.ini
+
+##后台启动
+[dmdba@~]$ /home/dmdba/dmdbms/bin/DmMonitorServiceMonitor start
+
+先前台启动监视器检查集群状态，集群状态正常后退出，再通过监视器服务后台启动监视器。
+
+2.6 启停集群
+
+##启动
+##A/B/C 机器
+[dmdba@~]$ /home/dmdba/dmdbms/bin/DmWatcherServiceWatcher start
+
+##停止
+##先停掉三个节点的守护进程：A/B/C 机器
+[dmdba@~]$ /home/dmdba/dmdbms/bin/DmWatcherServiceWatcher stop
+##停掉主库实例：A 机器
+[dmdba@~]$ /home/dmdba/dmdbms/bin/DmServiceGRP1_RWW_01 stop
+##停掉备库实例：B 机器
+[dmdba@~]$ /home/dmdba/dmdbms/bin/DmServiceGRP1_RWW_02 stop
+##停掉备库实例：C 机器
+[dmdba@~]$ /home/dmdba/dmdbms/bin/DmServiceGRP1_RWW_03 stop
+
+三、dm_svc.conf 配置
+
+3.1 简介
+
+dm_svc.conf 是使用达梦数据库时非常重要的配置文件，它包含了达梦各接口和客户端工具所需要配置的一些参数。通过它可以实现达梦各种集群的读写分离和均衡负载，且必须和接口/客户端工具位于同一台机器上才能生效。
+
+初始 dm_svc.conf 文件由达梦安装时自动生成。不同的平台生成目录有所不同，注意相应访问用户需要对该文件有读取权限。
+
+32 位的 DM 安装在 Win32 操作平台下，此文件位于 %SystemRoot%\system32 目录；
+
+64 位的 DM 安装在 Win64 操作平台下，此文件位于 %SystemRoot%\system32 目录；
+
+32 位的 DM 安装在 Win64 操作平台下，此文件位于 %SystemRoot%\SysWOW64 目录；
+
+在 Linux 平台下，此文件位于 /etc 目录。
+
+但在某些情况下，所使用的用户没有读取和修改 /etc 目录下文件的权限，这时就需要将 dm_svc.conf 文件放到有权限的目录下，并修改 url 连接串的内容。以 Linux 平台，文件放在 /home/dmdba 目录下为例：
+
+在 /home/dmdba 目录下，编辑 dm_svc.conf 文件：
+
+TIME_ZONE=(480) LANGUAGE=(cn) dm=(列出集群中所有节点ip:端口) [dm] KEYWORDS=(需要排除的关键字)
+
+修改连接串
+
+jdbc:dm://dm?dmsvcconf=/home/dmdba/dm_svc.conf
+
+dm_svc.conf 配置文件的内容分为全局配置区和服务配置区。全局配置区在前，可配置所有的配置项，服务配置区在后，以“[服务名]”开头，可配置除了服务名外的所有配置项。服务配置区中的配置优先级高于全局配置区（服务配置区的相同配置项会覆盖全局配置区对应的配置项）。
+
+3.2 常用配置项介绍
+
+服务名
+
+用于连接数据库的服务名，参数值格式为：
+
+服务名=(IP[:PORT],IP[:PORT],......)。
+
+TIME_ZONE
+
+指明客户端的默认时区设置范围为：-779~840M，如 60 对应 +1:00 时区，+480 对于东八区，如果不做配置默认是操作系统的时区。
+
+KEYWORDS
+
+该参数可以用于屏蔽数据库关键字，如果数据库关键字在 SQL 语句中以单词的形式存在，无法识别需要加上双引号或者可以通过该参数来屏蔽关键字，建议大小写都写入参数中。
+
+例如：KEYWORDS=（versions,VERSIONS,type,TYPE）
+
+LOGIN_MODE
+
+指定优先登录的服务器模式。0：优先连接 PRIMARY 模式的库，NORMAL 模式次之，最后选择 STANTBY 模式；1：只连接主库；2：只连接备库；3：优先连接 STANDBY 模式的库，PRIMARY 模式次之，最后选择 NORMAL 模式；4：优先连接 NORMAL 模式的库，PRIMARY 模式次之，最后选择 STANDBY 模式。
+
+注意
+
+在 2021 年版本之后，此参数的默认值由 0 变更为 4。该参数详细介绍及使用办法请参考《DM 数据守护与读写分离集群》-5.8 章节。手册位于数据库安装路径 /dmdbms/doc 文件夹。
+
+SWITCH_TIMES
+
+表示以服务名连接数据库时，若未找到符合条件的库成功建立连接，将尝试遍历服务名中库列表的次数。有效值范围 1~9223372036854775807，默认值为 1，可以设置至少 3 次用来避免由于网卡的波动，造成数据库连接测频繁切换。
+
+SWITCH_INTERVAL
+
+表示在服务器之间切换的时间间隔，单位为毫秒，有效值范围 1~9223372036854775807。与参数 SWITCH_TIMES、EP_SELECTOR 配合使用，EP_SELECTOR 设置为 0，等待 SWITCH_INTERVAL 后会切换尝试连接下一个服务器，EP_SELECTOR 设置为 1，等待 SWITCH_INTERVAL 后会继续尝试连接该服务器，直到 SWITCH_TIMES 次再切换下一个服务器。
+
+RW_SEPARATE
+
+表示是否启用读写分离。0：不启用；1：启用；2：启用，备库由客户端进行选择，且只会选择服务名中配置的节点。
+
+RW_PERCENT
+
+表示读写分离分发比例，有效值范围 0~100，主库占所有事物数的比例。可以根据主备库的实际压力来设定。
+
+EP_SELECTOR
+
+表示连接数据库时采用何种模型建立连接，0：依次选取列表中的不同节点建立连接，使得所有连接均匀地分布在各个节点上，1：选择列表中最前面的节点建立连接，只有当前节点无法建立连接时才会选择下一个节点进行连接。
+
+AUTO_RECONNECT
+
+表示连接发生异常或一些特殊场景下连接处理策略。0：关闭连接，1：当连接发生异常时自动切换到其他库，无论切换成功还是失败都会抛一个 SQLEXCEPTION，用于通知上层应用进行事务执行失败时的相关处理；2 配合 EP_SELECTOR=1 使用，如果服务名列表前面的节点恢复了，将当前连接切换到前面的节点上，可以根据应用的实际要求设定。
+
+3.3 常用配置
+
+3.3.1 单机配置
+
+配置示例
+
+##以#开头的行表示是注释
+##全局配置区
+TIME_ZONE=(480) LANGUAGE=(cn) DM=(172.16.1.1:5236)
+
+连接示例：
+
+Disql 连接：
+
+[dmdba@localhost~]$/dmsoft/dmdbms/disql SYSDBA/*****@DM
+
+通过管理工具连接：
+
+3.2.2 读写分离集群配置
+
+配置示例
+
+##以#开头的行表示是注释
+##全局配置区
+TIME_ZONE=(480) LANGUAGE=(cn) DMRW=(172.16.1.1:5236,172.16.1.2:5236,172.16.1.3:5236)
+##服务配置
+[DMRW] LOGIN_MODE=(1) RW_SEPARATE=(1) RW_PERCENT=(30) SWITCH_TIMES=(60) SWITCH_INTERVAL=(1000)
+
+jdbc 连接串
+
+jdbc:dm://DMRW
+
+上次更新：2026-09-26 上一篇下一篇
+
+读写分离集群安装部署
+
+一、安装前准备
+1.1 硬件环境建议
+1.1.1 网络环境
+1.1.2 磁盘 IO
+1.2 集群规划
+1.3 集群架构
+1.4 切换模式说明
+二、集群搭建
+2.1 配置 A 机器
+2.1.1 初始化实例并备份数据
+2.1.2 修改 dmarch.ini
+2.1.3 创建 dmmal.ini
+2.1.4 创建 dmwatcher.ini
+2.1.5 拷贝备份文件
+2.1.6 注册服务
+2.2 配置 B 机器
+2.2.1 初始化实例
+2.2.2 恢复数据
+2.2.3 替换 dmarch.ini
+2.2.4 配置 dm.ini、dmmal.ini 和 dmwatcher.ini
+2.2.5 注册服务
+2.3 配置 C 机器
+2.3.1 初始化实例
+2.3.2 恢复数据
+2.3.3 替换 dmarch.ini
+2.3.4 配置 dm.ini、dmmal.ini 和 dmwatcher.ini
+2.3.5 注册服务
+2.4 配置监视器
+2.4.1 创建 dmmonitor.ini
+2.4.2 注册服务（选做）
+2.4.3 监视器使用
+2.5 启动服务及查看信息
+2.5.1 启动数据库并修改参数
+2.5.2 启动守护进程
+2.5.3 启动监视器
+2.6 启停集群
+三、dm_svc.conf 配置
+3.1 简介
+3.2 常用配置项介绍
+3.3 常用配置
+3.3.1 单机配置
+3.2.2 读写分离集群配置
+
+微信扫码 分享文档
+
+扫一扫 联系客服
+
+关于我们
+
+合作伙伴
+
+招贤纳士
+
+英文站
+
+达梦官网
+
+达梦技术
+
+蜀天梦图
+
+微信公众号
+
+24小时热线
+
+400 991 6599
+
+商务咨询转 1 号线
+
+技术咨询转 2 号线
+
+技术支持
+
+dmtech@dameng.com
+
+鄂Copyright © 2026 达梦国产化应用创新实验室 鄂ICP备18017926号-1
+
+鄂Copyright © 2026 达梦国产化应用创新实验室 鄂ICP备18017926号-1
+
+快速上手运维指南应用开发指南SQL 开发指南常见问题产品手册
+
+数据库规范化部署
+
+安装前准备工作 单机安装部署 数据守护集群安装部署 读写分离集群安装部署 共享存储集群安装部署 新一代分布式集群安装部署
+
+数据库运维监控
+
+系统资源监控 实例状态监控 运维监控工具
+
+数据库健康检查
+
+系统健康检查 实例健康检查 集群健康检查
+
+数据库备份还原
+
+物理备份还原 逻辑备份还原 实战案例
+
+性能诊断与优化
+
+性能诊断 性能优化
+
+故障诊断与排除
+
+SQL 类故障 实例故障 人为操作故障
+
+简体中文
+
+简体中文
