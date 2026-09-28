@@ -1,0 +1,10 @@
+# GS\_MASKING
+
+GS\_MASKING视图显示所有已配置的动态脱敏策略信息。需要有系统管理员或安全策略管理员权限才可以访问此视图。
+
+polname name 脱敏策略名称。
+polenabled boolean 脱敏策略开关。
+maskaction name 脱敏函数。
+labelname name 脱敏函数作用的标签名称。
+masking_object text 脱敏数据库资源对象。
+filter_name text 过滤条件的逻辑表达式。

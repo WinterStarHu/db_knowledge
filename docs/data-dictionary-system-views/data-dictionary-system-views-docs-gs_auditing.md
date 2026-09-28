@@ -1,0 +1,15 @@
+# GS\_AUDITING
+
+GS\_AUDITING视图显示对数据库相关操作的所有审计信息。需要有系统管理员或安全策略管理员权限才可以访问此视图。
+
+**表 1**  GS\_AUDITING字段
+
+polname name 策略名称，需要唯一，不可重复。
+pol_type text 审计策略类型，值为‘access’或者‘privilege’。
+access：表示审计DML操作。privilege：表示审计DDL操作。
+polenabled boolean 用来表示策略启动开关。
+t（true）：表示启动。f（false）：表示不启动。
+access_type bigint DML数据库操作相关类型。例如SELECT、INSERT、DELETE等。
+label_name name 资源标签名称。对应系统表gs_auditing_policy中的polname字段。
+priv_object name 用来描述数据库资产的路径。
+filter_name text 过滤条件的逻辑字符串。

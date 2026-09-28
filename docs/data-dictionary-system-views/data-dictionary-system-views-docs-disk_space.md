@@ -1,0 +1,38 @@
+# 磁盘空间
+
+介绍与磁盘空间相关的参数，用于限制临时文件所占用的磁盘空间。
+
+## sql\_use\_spacelimit
+
+**参数说明**： 限制单个SQL在单个数据库节点上、触发落盘操作时、落盘文件的空间大小、管控的空间包括普通表、临时表以及中间结果集落盘占用的空间，对初始用户不生效。
+
+该参数属于USERSET类型参数，请参考[表1](../database_administration_guide/reset_parameters.md#zh-cn_topic_0283137176_zh-cn_topic_0237121562_zh-cn_topic_0059777490_t91a6f212010f4503b24d7943aed6d846)中对应设置方法进行设置。
+
+**取值范围**： 整型，-1\~2147483647，单位为KB。其中-1表示没有限制。
+
+**默认值**： -1
+
+## temp\_file\_limit
+
+**参数说明**： 限制一个会话中，触发下盘操作时，下盘文件占用的空间大小。例如一次会话中，排序和哈希表使用的临时文件，或者游标占用的临时文件。
+
+此设置为会话级别的下盘文件控制。
+
+该参数属于SUSET类型参数，请参考[表1](../database_administration_guide/reset_parameters.md#zh-cn_topic_0283137176_zh-cn_topic_0237121562_zh-cn_topic_0059777490_t91a6f212010f4503b24d7943aed6d846)中对应设置方法进行设置。
+
+>[!TIP]须知
+>SQL查询执行时使用的临时表空间不在此限制。
+
+**取值范围**： 整型，-1\~2147483647，单位为KB。其中-1表示没有限制。
+
+**默认值**： -1
+
+## max\_notify\_queue\_pages
+
+**参数说明**： 设置允许堆积的NOTIFY消息占用的最大页数（一个页的大小为一个BLCKSZ，即8KB），关于NOTIFY消息详见[NOTIFY](../sql_reference/notify.md)。
+
+该参数属于POSTMASTER类型参数，请参考[表1](../database_administration_guide/reset_parameters.md#zh-cn_topic_0283137176_zh-cn_topic_0237121562_zh-cn_topic_0059777490_t91a6f212010f4503b24d7943aed6d846)中对应设置方法进行设置。
+
+**取值范围**： 整型，64\~INT\_MAX。
+
+**默认值**： 1048576

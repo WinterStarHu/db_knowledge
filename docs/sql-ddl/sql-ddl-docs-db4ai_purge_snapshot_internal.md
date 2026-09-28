@@ -1,0 +1,7 @@
+# DB4AI.PURGE\_SNAPSHOT\_INTERNAL
+
+PURGE\_SNAPSHOT\_INTERNAL是DB4AI.PURGE\_SNAPSHOT函数的内置执行函数。函数存在信息校验，无法直接调用
+
+**表 1**  DB4AI.PURGE\_SNAPSHOT\_INTERNAL入参和返回值列表
+
+i_schema IN NAME 快照存储的模式名字 i_name IN NAME 快照名称

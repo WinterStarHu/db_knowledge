@@ -1,0 +1,270 @@
+# 全密态数据库
+
+全密态数据库意在解决数据全生命周期的隐私保护问题，使得系统无论在何种业务场景和环境下，数据在传输、运算以及存储的各个环节始终都处于密文状态。当数据拥有者在客户端完成数据加密并发送给服务端后，在攻击者借助系统脆弱点窃取用户数据的状态下仍然无法获得有效的价值信息，从而起到保护数据隐私的能力。
+
+由于整个业务数据流在数据处理过程中都是以密文形态存在，通过全密态数据库，可以实现：
+
+- 保护数据在云上全生命周期的隐私安全。无论数据处于何种状态，攻击者都无法从数据库服务端获取有效信息。
+- 帮助云服务提供商获取第三方信任。无论是企业服务场景下的业务管理员、运维管理员，还是消费者云业务下的应用开发者，用户通过将密钥掌握在自己手上，使得高权限用户无法获取数据有效信息。
+- 让云数据库服务借助全密态能力更好的遵守个人隐私保护方面的法律法规。
+
+全密态数据库目前支持两种连接方式：gsql连接和jdbc连接。下面将详细介绍两种连接方式下数据库的使用流程。
+
+## 连接全密态数据库
+
+- GSQL连接数据库执行以下命令打开密态开关：
+
+    ```
+    gsql -p PORT -d postgres -r -C
+    ```
+
+参数说明：
+
+  - -p：端口号
+  - -d：数据库名称
+  - -C：是打开密态开关。
+
+- JDBC支持密态数据库相关操作，需要设置enable\_ce=1
+
+## 创建用户密钥
+
+全密态数据库有两种密钥，即客户端主密钥CMK和数据加密密钥CEK。CMK用于加密CEK，CEK用于加密用户数据。
+
+密钥创建的顺序和依赖依次为： 创建CMK \> 创建CEK。
+
+- **GSQL环境下创建CMK和CEK：**
+
+**【创建CMK】**
+
+    ```
+    CREATE CLIENT MASTER KEY client_master_key_name WITH (KEY_STORE =key_store_name, KEY_PATH = "key_path_value", ALGORITHM = algorithm_type);
+    ```
+
+参数说明：
+
+  - **client\_master\_key\_name**
+
+该参数作为密钥对象名，在同一命名空间下，需满足命名唯一性约束。
+
+取值范围：字符串，需符合标识符的命名规范。
+
+  - **KEY\_STORE**
+
+指定管理CMK的密钥工具或组件；取值：目前仅支持localkms。
+
+  - **KEY\_PATH**
+
+KEY\_STORE负责管理多个CMK密钥，KEY\_PATH选项用于在KEY\_STORE中唯一标识CMK。取值类似：“key\_path\_value”。
+
+  - **ALGORITHM**
+
+由本语法创建的用于加密COLUMN ENCRYPTION KEY，该参数用于指定加密算法的类型。取值范围：RSA\_2048、RSA3072和SM2。
+
+>[!NOTE]说明
+>密钥存储路径：默认情况下，localkms将在 `$LOCALKMS\_FILE\_PATH` 路径下生成/读取/删除密钥文件，用户可手动配置该环境变量。但是，用户也可以不用单独配置该环境变量，在尝试获取 `$LOCALKMS\_FILE\_PATH` 失败时，localkms会尝试获取 `$GAUSSHOME/etc/localkms/` 路径，如果该路径存在，则将其作为密钥存储路径。
+>密钥相关文件名：使用CREATE CMK语法时，localkms将会创建四个与存储密钥相关的文件。示例：当KEY\_PATH = "key\_path\_value", 四个文件的名称分别为key\_path\_value.pub、key\_path\_value.pub.rand、 key\_path\_value.priv、 key\_path\_value.priv.rand。
+>所以，为了能够成功创建密钥相关文件，在密钥存储路径下，应该保证没有已存在的与密钥相关文件名同名的文件。
+
+**【创建CEK】**
+
+    ```
+    CREATE COLUMN ENCRYPTION KEY column_encryption_key_name WITH(CLIENT_MASTER_KEY = client_master_key_name, ALGORITHM = algorithm_type, ENCRYPTED_VALUE = encrypted_value);
+    ```
+
+参数说明：
+
+  - **column\_encryption\_key\_name**
+
+该参数作为密钥对象名，在同一命名空间下，需满足命名唯一性约束。
+
+取值范围：字符串，要符合标识符的命名规范。
+
+  - **CLIENT\_MASTER\_KEY**
+
+指定用于加密本CEK的CMK。
+
+取值为：CMK对象名，该CMK对象由CREATE CLIENT MASTER KEY语法创建。
+
+  - **ALGORITHM**
+
+指定该CEK将用于何种加密算法。
+
+取值范围为：AEAD\_AES\_256\_CBC\_HMAC\_SHA256、AEAD\_AES\_128\_CBC\_HMAC\_SHA256和SM4\_SM3；
+
+  - **ENCRYPTED\_VALUE**（可选项）
+
+该值为用户指定的密钥口令，密钥口令长度范围为28 \~ 256个字符。28个字符派生出来的密钥安全强度满足AES128。若用户需要用AES256，密钥口令的长度需要39个字符。如果不指定，则会自动生成256比特的密钥。
+
+>[!NOTE]说明
+>由于SM2、SM3、SM4等算法属于中国国家密码标准算法，为规避法律风险，需配套使用。如果创建CMK时指定SM4算法来加密CEK，则创建CEK时必须指定SM4\_SM3算法来加密数据。
+
+**【示例:GSQL环境下：】**
+
+    ```
+    -- 创建$GAUSSHOME/etc/localkms/路径
+    mkdir -p $GAUSSHOME/etc/localkms/
+    -- 使用特权账户，创建一个普通用户alice。
+     openGauss=# CREATE USER alice PASSWORD '********';
+    -- 使用普通用户alice的账户，连接密态数据库，并执行本语法。
+     gsql -p 57101 postgres -U alice -r -C
+    -- 创建客户端加密主密钥（CMK）对象。
+     openGauss=> CREATE CLIENT MASTER KEY alice_cmk WITH (KEY_STORE = localkms , KEY_PATH = "key_path_value", ALGORITHM = RSA_2048);
+    -- 创建客户端列加密密钥（CEK）对象。
+     openGauss=> CREATE COLUMN ENCRYPTION KEY ImgCEK WITH VALUES (CLIENT_MASTER_KEY = alice_cmk, ALGORITHM  = AEAD_AES_256_CBC_HMAC_SHA256);
+    ```
+
+- **JDBC环境下创建CMK和CEK：**
+
+    ```
+    // 创建客户端主密钥
+     Connection conn = DriverManager.getConnection("url","user","password");Statement stmt = conn.createStatement();int rc = stmt.executeUpdate("CREATE CLIENT MASTER KEY ImgCMK1 WITH ( KEY_STORE = localkms , KEY_PATH = "key_path_value" , ALGORITHM = AES_256_CBC);");
+
+     // 创建列加密密钥
+     int rc2 = stmt.executeUpdate("CREATE COLUMN ENCRYPTION KEY ImgCEK1 WITH VALUES (CLIENT_MASTER_KEY = ImgCMK1, ALGORITHM  = AEAD_AES_256_CBC_HMAC_SHA256);");
+    ```
+
+## 创建加密表
+
+在创建了客户端主密钥CMK和数据加密密钥CEK之后，就可以使用CEK创建加密表了。加密表的创建支持对加密列进行随机加密和确定性加密两种方式。
+
+- **GSQL连接环境下创建加密表：**
+
+【示例】
+
+    ```
+    openGauss=# CREATE TABLE creditcard_info (id_number int, name text encrypted with (column_encryption_key = ImgCEK, encryption_type = DETERMINISTIC),credit_card  varchar(19) encrypted with (column_encryption_key = ImgCEK, encryption_type = DETERMINISTIC));
+    ```
+
+参数说明
+
+ENCRYPTION\_TYPE为ENCRYPTED WITH约束中的加密类型，encryption\_type\_value的值为\[ DETERMINISTIC | RANDOMIZED \]。
+
+- **JDBC环境下创建加密表：**
+
+    ```
+    int rc3 = stmt.executeUpdate("CREATE TABLE creditcard_info (id_number    int, name  varchar(50) encrypted with (column_encryption_key = ImgCEK, encryption_type = DETERMINISTIC),credit_card  varchar(19) encrypted with (column_encryption_key = ImgCEK1, encryption_type = DETERMINISTIC));");
+    ```
+
+## 向加密表插入数据并进行查询
+
+创建了加密表以后，可以在密态数据库模式下（连接参数-C）向加密表中插入数据、查看数据。当使用普通环境（关掉连接参数-C）时，是无法对加密表进行操作的，查看加密表时也只能看到密文数据。
+
+- **GSQL环境下向加密表插入数据并查看：**
+
+    ```
+    openGauss=# INSERT INTO creditcard_info VALUES (1,'joe','6217986500001288393');
+     INSERT 0 1
+     openGauss=# INSERT INTO creditcard_info VALUES (2, 'joy','6219985678349800033');
+     INSERT 0 1
+     openGauss=# select * from creditcard_info where name = 'joe';
+      id_number | name |     credit_card
+     -----------+------+---------------------
+              1 | joe  | 6217986500001288393
+     (1 row)
+    ```
+
+>[!NOTE]说明
+>使用非密态客户端查看该加密表数据时是密文。
+
+    ```
+    openGauss=# select id_number,name from creditcard_info;
+      id_number |                name
+     -----------+-------------------------------------------
+              1 | \x011aefabd754ded0a536a96664790622487c4d36
+              2 | \x011aefabd76853108eb406c0f90e7c773b71648f
+     (2 rows)
+    ```
+
+- **JDBC环境下向加密表插入数据并查看：**
+
+    ```
+    // 插入数据
+     int rc4 = stmt.executeUpdate("INSERT INTO creditcard_info VALUES (1,'joe','6217986500001288393');");
+     // 查询加密表
+     ResultSet rs = null;
+     rs = stmt.executeQuery("select * from creditcard_info where name = 'joe';");
+     // 关闭语句对象
+     stmt.close();
+    ```
+
+## 加密表的 DDL/DML 变更
+
+在创建了客户端主密钥CMK、数据加密密钥CEK和加密表之后，还可以对加密表进行新增加密列、删除列、更新加密列数据、重命名列或表等操作。上述操作须在密态数据库模式下执行（gsql 连接参数 **-C**，JDBC 设置 **enable_ce=1**）。新增加密列须使用 **ADD COLUMN ... ENCRYPTED WITH**；**ALTER COLUMN** 仅用于修改已有加密列的有限属性（如默认值），不能用于给已有明文列增加加密，也不能修改已有加密列的数据类型。
+
+- **GSQL环境下对加密表进行 DDL/DML 变更：**
+
+    ```
+    openGauss=# ALTER TABLE creditcard_info ADD COLUMN age int ENCRYPTED WITH (COLUMN_ENCRYPTION_KEY = ImgCEK, ENCRYPTION_TYPE = DETERMINISTIC);
+    ALTER TABLE
+    openGauss=# \d creditcard_info
+            Table "public.creditcard_info"
+       Column    |       Type        | Modifiers
+    -------------+-------------------+------------
+     id_number   | integer           |
+     name        | text              |  encrypted
+     credit_card | character varying |  encrypted
+     age         | integer           |  encrypted
+    openGauss=# ALTER TABLE creditcard_info DROP COLUMN age;
+    ALTER TABLE
+    openGauss=# UPDATE creditcard_info SET credit_card = '80000000011111111' WHERE name = 'joy';
+    UPDATE 1
+    openGauss=# SELECT * FROM creditcard_info WHERE name = 'joy';
+     id_number | name |    credit_card
+    -----------+------+-------------------
+             2 | joy  | 80000000011111111
+    (1 row)
+    openGauss=# ALTER TABLE creditcard_info RENAME COLUMN name TO customer_name;
+    ALTER TABLE
+    openGauss=# ALTER TABLE creditcard_info RENAME TO card_info;
+    ALTER TABLE
+    openGauss=# SELECT * FROM card_info WHERE customer_name = 'joe';
+     id_number | customer_name |     credit_card
+    -----------+---------------+---------------------
+             1 | joe           | 6217986500001288393
+    (1 row)
+    ```
+
+参数说明
+
+  - **ADD COLUMN ... ENCRYPTED WITH**：用于新增加密列；新列元数据写入 **gs_encrypted_columns**。不支持 **ADD COLUMN ... FIRST | AFTER** 与 **ENCRYPTED WITH** 同时使用。
+  - **DROP COLUMN**：删除加密列会同时清理该列加密元数据；若 CEK 仍被其他加密列引用，CEK 不会被删除。
+  - **UPDATE**：须在密态连接下执行；客户端对写入值加密、对读出值解密。**WHERE** 中对加密列的等值条件要求该列为 **DETERMINISTIC** 加密（与上文 **ENCRYPTION_TYPE** 说明一致）。
+  - **RENAME COLUMN / RENAME TO**：加密属性保留，**gs_encrypted_columns** 中列名会同步更新。
+
+>[!NOTE]说明
+>**ALTER COLUMN** 仅支持对已有加密列设置或删除默认值，例如：
+>
+>```
+>openGauss=# CREATE TABLE creditcard_info2 (id int, price numeric ENCRYPTED WITH (COLUMN_ENCRYPTION_KEY = ImgCEK, ENCRYPTION_TYPE = DETERMINISTIC) DEFAULT 9.99);
+>openGauss=# ALTER TABLE creditcard_info2 ALTER COLUMN price SET DEFAULT 7.77;
+>openGauss=# INSERT INTO creditcard_info2 (id) VALUES (1);
+>openGauss=# ALTER TABLE creditcard_info2 ALTER COLUMN price DROP DEFAULT;
+>openGauss=# DROP TABLE creditcard_info2;
+>```
+>
+>只改默认值元数据，不改变列是否加密、不改变 CEK。
+
+>[!NOTE]说明
+>以下操作不支持，请勿使用：
+>- 用 **ALTER COLUMN** 给已有列增加加密、将明文列改为加密列或修改已有加密列类型。
+
+- **JDBC环境下对加密表进行 DDL/DML 变更：**
+
+    ```
+    // 新增加密列
+    int rc5 = stmt.executeUpdate("ALTER TABLE creditcard_info ADD COLUMN age int ENCRYPTED WITH (COLUMN_ENCRYPTION_KEY = ImgCEK, ENCRYPTION_TYPE = DETERMINISTIC);");
+    // 删除列
+    int rc6 = stmt.executeUpdate("ALTER TABLE creditcard_info DROP COLUMN age;");
+    // 更新加密列
+    int rc7 = stmt.executeUpdate("UPDATE creditcard_info SET credit_card = '80000000011111111' WHERE name = 'joy';");
+    // 查询
+    ResultSet rs2 = stmt.executeQuery("SELECT * FROM creditcard_info WHERE name = 'joy';");
+    // 重命名列、表
+    int rc8 = stmt.executeUpdate("ALTER TABLE creditcard_info RENAME COLUMN name TO customer_name;");
+    int rc9 = stmt.executeUpdate("ALTER TABLE creditcard_info RENAME TO card_info;");
+    rs2 = stmt.executeQuery("SELECT * FROM card_info WHERE customer_name = 'joe';");
+    // 关闭语句对象
+    stmt.close();
+    ```
+
+上述我们列出的是全密态数据库特性的基本使用方法，更全面的使用介绍，可以参考官方文档中的对应章节。

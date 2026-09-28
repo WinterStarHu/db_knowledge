@@ -1,0 +1,10 @@
+# Wait Classes by Total Wait Time
+
+Wait Classes by Total Wait Time列名称及描述如下表所示。
+
+**表 1**  Wait Classes by Total Wait Time报表主要内容
+
+列名称 Type Wait Event类别名称： STATUS。LWLOCK_EVENT。LOCK_EVENT。IO_EVENT。
+Waits Wait次数。
+Total Wait Time(us) 总Wait时间（微秒）。
+Avg Wait Time(us) 平均Wait时间（微秒）。

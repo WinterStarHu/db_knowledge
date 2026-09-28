@@ -1,0 +1,14 @@
+# PG\_PLTEMPLATE
+
+PG\_PLTEMPLATE系统表存储过程语言的“模板”信息。
+
+**表 1**  PG\_PLTEMPLATE字段
+
+tmplname name 这个模板所应用的语言的名称。
+tmpltrusted boolean 如果语言被认为是可信的，则为真。
+tmpldbacreate boolean 如果语言是由数据库所有者创建的，则为真。
+tmplhandler text 调用处理器函数的名称。
+tmplinline text 匿名块处理器的名称，若没有则为NULL。
+tmplvalidator text 校验函数的名称，如果没有则为NULL。
+tmpllibrary text 实现语言的共享库的路径。
+tmplacl aclitem[] 模板的访问权限（未使用）。

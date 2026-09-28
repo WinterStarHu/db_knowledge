@@ -1,0 +1,144 @@
+# 日志回放
+
+## recovery\_time\_target
+
+**参数说明**： 设置recovery\_time\_target秒能够让备机完成日志写入和回放。
+
+该参数属于SIGHUP类型参数，请参考[表1](../database_administration_guide/reset_parameters.md#zh-cn_topic_0283137176_zh-cn_topic_0237121562_zh-cn_topic_0059777490_t91a6f212010f4503b24d7943aed6d846)中对应设置方法进行设置。
+
+**取值范围**：整型，0\~3600（秒）
+
+0是指不开启日志流控，1\~3600是指备机能够在recovery\_time\_target时间内完成日志的写入和回放，可以保证主机与备机切换时能够在recovery\_time\_target秒完成日志写入和回放，保证备机能够快速升主机。recovery\_time\_target设置时间过小会影响主机的性能，设置过大会失去流控效果。另外，由于极致RTO自带流控，所以同时开启极致RTO与流控时会以极致RTO优先，在运行期间使流控不生效。
+
+>[!TIP]须知
+>
+>- 如果存在同步备机，且当前主机的事务同步提交方式非off，在流控参数生效后，会阻塞主机的事务提交。如果流控检测到备机需要的RTO时间长时间超过所配置的值，那么主机的事务提交可能会长时间被阻塞，直到备机RTO时长低于所配置的值。
+>- 当主机的事务提交长时间被阻塞时，在客户端可能会报错锁超时：“Lock wait timeout...”或者“wait transaction xxx sync time exceed xxx”。实际报错的频次依赖于所配置的锁超时时间和流控实际阻塞主机事务提交的时间。此时关闭流控参数后可恢复正常。
+
+**默认值**： 0
+
+## recovery\_max\_workers
+
+**参数说明**： 设置最大并行回放线程个数。
+
+该参数属于POSTMASTER类型参数，请参考[表1](../database_administration_guide/reset_parameters.md#zh-cn_topic_0283137176_zh-cn_topic_0237121562_zh-cn_topic_0059777490_t91a6f212010f4503b24d7943aed6d846)中对应设置方法进行设置。
+
+**取值范围**：整型，0\~20
+
+**默认值**： 1（安装工具默认设置为4，以获得更好的性能）
+
+## recovery\_parse\_workers
+
+**参数说明**： 是极致RTO特性中ParseRedoRecord线程的数量。
+
+该参数属于POSTMASTER类型参数，请参考[表1](../database_administration_guide/reset_parameters.md#zh-cn_topic_0283137176_zh-cn_topic_0237121562_zh-cn_topic_0059777490_t91a6f212010f4503b24d7943aed6d846)中对应设置方法进行设置。
+
+**取值范围**：整型，1\~16
+
+仅在开启极致RTO情况下可以设置recovery\_parse\_workers为\>1。需要配合recovery\_redo\_workers使用。若同时开启recovery\_parse\_workers和recovery\_max\_workers，以开启极致RTO的recovery\_parse\_workers为准，并行回放特性失效。因极致RTO不支持主备从模式，仅在参数replication\_type设置成1时可以设置recovery\_parse\_workers为\>1。另外，极致RTO也不支持列存，在已经使用列存表或者即将使用列存表的系统中，请关闭极致RTO。极致RTO不再自带流控，流控统一由[recovery\_time\_target](#zh-cn_topic_0283136722_zh-cn_topic_0237124709_zh-cn_topic_0059778936_sbadc77895e6643b882a5e7557e405373)参数来控制。。
+
+**默认值**： 1
+
+## recovery\_redo\_workers
+
+**参数说明**： 是极致RTO特性中每个ParseRedoRecord线程对应的PageRedoWorker数量。
+
+该参数属于POSTMASTER类型参数，请参考[表1](../database_administration_guide/reset_parameters.md#zh-cn_topic_0283137176_zh-cn_topic_0237121562_zh-cn_topic_0059777490_t91a6f212010f4503b24d7943aed6d846)中对应设置方法进行设置。
+
+**取值范围**：整型，1\~8
+
+需要配合recovery\_parse\_workers使用。在配合recovery\_parse\_workers使用时，只有recovery\_parse\_workers大于1，recovery\_redo\_workers参数才生效。
+
+**默认值**： 1
+
+## enable\_page\_lsn\_check
+
+**参数说明**： 数据页lsn检查开关。回放时，检查数据页当前的lsn是否是期望的lsn。
+
+该参数属于POSTMASTER类型参数，请参考[表1](../database_administration_guide/reset_parameters.md#zh-cn_topic_0283137176_zh-cn_topic_0237121562_zh-cn_topic_0059777490_t91a6f212010f4503b24d7943aed6d846)中对应设置方法进行设置。
+
+**取值范围**：布尔型
+
+**默认值**： on
+
+>[!WARNING]注意 该参数是保留参数，无实际用途。
+
+## recovery\_min\_apply\_delay
+
+**参数说明**： 设置备节点回放的延迟时间。
+
+该参数属于SIGHUP类型参数，请参考[表1](../database_administration_guide/reset_parameters.md#zh-cn_topic_0283137176_zh-cn_topic_0237121562_zh-cn_topic_0059777490_t91a6f212010f4503b24d7943aed6d846)中对应设置方法进行设置。
+
+>[!TIP]须知
+>
+>- 此参数主节点设置无效，必须设置在需要延迟的备节点上，推荐设置在异步备上，设置了延时的异步备如果升主RTO时间会比较长。
+>- 延迟时间是根据主服务器上事务提交的时间戳与备机上的当前时间来计算，因此需要保证主备系统时钟一致。
+>- 延迟时间设置过长时，可能会导致该备机XLOG文件所在的磁盘满，需要平衡考虑磁盘大小来设置延迟时间。
+>- 没有事务的操作不会被延迟。
+>- 主备切换之后，原主机若需延迟，需要再手动配置此参数。
+>- 当synchronous\_commit被设置为remote\_apply时，同步复制会受到这个延时的影响，每一个COMMIT都需要等待备机回放结束后才会返回。
+>- 使用这个特性也会让hot\_standby\_feedback被延迟，这可能导致主服务器的膨胀，两者一起使用时要小心。
+>- 主机执行了持有AccessExclusive锁的DDL操作，比如DROP和TRUNCATE操作，在备机延迟回放该条记录期间，在备机上对该操作对象执行查询操作会等待锁释放之后才会返回。
+>- 不支持MOT表。
+
+**取值范围**： 整型，0\~INT\_MAX，单位为毫秒。
+
+**默认值**： 0（不增加延迟）
+
+## redo\_bind\_cpu\_attr
+
+**参数说明**：用于控制回放线程的绑核操作，仅sysadmin用户可以访问。该参数属于POSTMASTER类型参数，请参考[表1](../database_administration_guide/reset_parameters.md#zh-cn_topic_0283137176_zh-cn_topic_0237121562_zh-cn_topic_0059777490_t91a6f212010f4503b24d7943aed6d846)中对应设置方法进行设置。
+
+**取值范围**：字符串，长度大于0，该参数不区分大小写。
+
+- 'nobind'：线程不做绑核。
+- 'nodebind: 1, 2'：利用NUMA组1,2中的CPU core进行绑核。
+- 'cpubind: 0-30'：利用0-30号CPU core进行绑核。
+
+**默认值**：'nobind'
+
+## enable_time_report
+
+**参数说明**：用于控制回放时是否记录回放统计信息。该参数属于POSTMASTER类型参数，请参考[表1](../database_administration_guide/reset_parameters.md#zh-cn_topic_0283137176_zh-cn_topic_0237121562_zh-cn_topic_0059777490_t91a6f212010f4503b24d7943aed6d846)中对应设置方法进行设置。
+
+**取值范围**：布尔型
+
+**默认值**： off
+
+## enable_batch_dispatch
+
+**参数说明**：表级并行回放时，由startup线程读取wal日志并决定每一个wal记录的实际redo线程，然后再将读取到的wal记录分发给具体的redo线程。此参数用于控制表级并行回放时，是否启用批量分发的功能，即允许积攒一定数量的wal记录，再分发给各个redo线程。该参数属于POSTMASTER类型参数，请参考[表1](../database_administration_guide/reset_parameters.md#zh-cn_topic_0283137176_zh-cn_topic_0237121562_zh-cn_topic_0059777490_t91a6f212010f4503b24d7943aed6d846)中对应设置方法进行设置。
+
+**取值范围**：布尔型
+
+**默认值**： off
+
+## parallel_recovery_batch
+
+**参数说明**：参照enable_batch_dispatch参数对批量分发功能的描述，此参数控制表级并行回放时startup线程暂存wal记录的数量。该参数属于SIGHUP类型参数，请参考[表1](../database_administration_guide/reset_parameters.md#zh-cn_topic_0283137176_zh-cn_topic_0237121562_zh-cn_topic_0059777490_t91a6f212010f4503b24d7943aed6d846)中对应设置方法进行设置。
+
+**取值范围**：整型，1~100000，意义为wal记录的个数
+
+**默认值**： 1000
+
+## parallel_recovery_timeout
+
+**参数说明**：在表级别并行回放时，如果当在一段时间内没有积攒够parallel_recovery_batch数量，则应该立即分发当前已经暂存的wal记录。此参数用于控制wal分发的timeout时间。该参数属于SIGHUP类型参数，请参考[表1](../database_administration_guide/reset_parameters.md#zh-cn_topic_0283137176_zh-cn_topic_0237121562_zh-cn_topic_0059777490_t91a6f212010f4503b24d7943aed6d846)中对应设置方法进行设置。
+
+**取值范围**：整型，1~1000，单位为毫秒
+
+**默认值**： 300
+
+## recovery\_parallelism
+
+**参数说明**： 查询实际回放线程个数，该参数为只读参数，无法修改。
+
+该参数属于POSTMASTER类型参数，受recovery\_max\_workers以及recovery\_parse\_workers参数影响，任意一值大于0时，recover\_parallelism将被重新计算。
+
+**取值范围**： 整型，1\~2147483647
+
+**默认值**： 1
+
+**表 1**  不同CPU、内存和部署模式下的参数设置参考
+
+CPU个数 内存（GB) 是否混合部署 recovery_parse_workers recovery_redo_workers 回放线程总数 不推荐开 不推荐开 不推荐开 128 不推荐开 128 256 256 512 512 大于此规格的均按照此参数 768 大于此规格的均按照此参数

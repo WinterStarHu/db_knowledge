@@ -1,0 +1,15 @@
+# PG\_LANGUAGE
+
+PG\_LANGUAGE系统表登记编程语言，用户可以用这些语言或接口写函数或者存储过程。
+
+**表 1**  PG\_LANGUAGE字段
+
+oid oid 行标识符（隐含属性，必须明确选择）。
+lanname name 语言的名称。
+lanowner oid PG_AUTHID.oid 语言的所有者。
+lanispl Boolean 对于内部语言而言是假（比如SQL），对于用户定义的语言则是真。目前，gs_dump仍然使用这个东西判断哪种语言需要转储，但是这些可能在将来被其它机制取代。
+lanpltrusted Boolean 如果这是可信语言则为真，意味着系统相信它不会被授予任何正常SQL执行环境之外的权限。只有初始用户可以用不可信的语言创建函数。
+lanplcallfoid oid PG_PROC.oid 对于非内部语言，这是指向该语言处理器的引用，语言处理器是一个特殊函数，负责执行以某种语言写的所有函数。
+laninline oid PG_PROC.oid 这个字段引用一个负责执行“inline”匿名代码块的函数（DO块）。如果不支持内联块则为零。
+lanvalidator oid PG_PROC.oid 这个字段引用一个语言校验器函数，它负责检查新创建的函数的语法和有效性。如果没有提供校验器，则为零。
+lanacl aclitem[] 访问权限。

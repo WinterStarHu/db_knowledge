@@ -1,0 +1,15 @@
+# GS\_POLICY\_LABEL
+
+GS\_POLICY\_LABEL系统表记录资源标签配置信息，一个资源标签对应着一条或多条记录，每条记录标记了数据库资源所属的资源标签。需要有系统管理员或安全策略管理员权限才可以访问此系统表。
+
+FQDN（Fully Qualified Domain Name）标识了数据库资源所属的绝对路径。
+
+**表 1**  GS\_POLICY\_LABEL表字段
+
+oid oid 行标识符（隐含属性，必须明确选择）。
+labelname name 资源标签名称。
+labeltype name 资源标签类型，目前仅为RESOURCE。
+fqdnnamespace oid 被标识的数据库资源所属的namespace oid。
+fqdnid oid 被标识的数据库资源的oid，若数据库资源为列，则该列为所属表的oid。
+relcolumn name 列名，若被标识的数据库资源为列，该列指出列名，否则该列为空。
+fqdntype name 被标识的数据库资源的类型名称，例如：schema、table、column、view等。

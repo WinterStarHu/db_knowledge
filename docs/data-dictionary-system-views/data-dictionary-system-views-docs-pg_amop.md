@@ -1,0 +1,19 @@
+# PG\_AMOP
+
+PG\_AMOP系统表存储有关和访问方法操作符族关联的信息。如果一个操作符是一个操作符族中的成员，则在这个表中会占据一行。一个族成员是一个search操作符或一个ordering操作符。一个操作符可以在多个族中出现，但是不能在一个族中的多个搜索位置或多个排序位置中出现。
+
+**表 1**  PG\_AMOP字段
+
+oid oid 行标识符（隐含属性，必须明确选择）。
+amopfamily oid PG_OPFAMILY.oid 这个项的操作符族。
+amoplefttype oid PG_TYPE.oid 操作符的左输入类型。可能取值及其描述见于系统表pg_type或查看源码中的pg_type.h文件。
+amoprighttype oid PG_TYPE.oid 操作符的右输入类型。可能取值及其描述见于系统表pg_type或查看源码中的pg_type.h文件。
+amopstrategy smallint 操作符策略数。
+amoppurpose "char" 操作符目的，s为搜索或o为排序。
+amopopr oid PG_OPERATOR.oid 该操作符的OID。
+amopmethod oid PG_AM.oid 索引访问方式操作符族。
+amopsortfamily oid PG_OPFAMILY.oid 如果是一个排序操作符，则为这个项排序所依据的btree操作符族；如果是一个搜索操作符，则为0。
+
+search操作符表明这个操作符族的一个索引可以被搜索，找到所有满足WHERE indexed\_column operator constant的行。显然，这样的操作符必须返回布尔值，并且它的左输入类型必须匹配索引的字段数据类型。
+
+ordering操作符表明这个操作符族的一个索引可以被扫描，返回以ORDER BY indexed\_column operator constant顺序表示的行。这样的操作符可以返回任意可排序的数据类型，它的左输入类型也必须匹配索引的字段数据类型。ORDER BY的确切的语义是由amopsortfamily字段指定的，该字段必须为操作符的返回类型引用一个btree操作符族。

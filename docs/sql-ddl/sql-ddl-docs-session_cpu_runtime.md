@@ -1,0 +1,16 @@
+# SESSION\_CPU\_RUNTIME
+
+SESSION\_CPU\_RUNTIME视图显示和当前用户执行复杂作业（正在运行）时的负载管理CPU使用的信息。
+
+**表 1**  SESSION\_CPU\_RUNTIME字段
+
+datid oid 连接后端的数据库OID。
+usename name 登录到该后端的用户名。
+pid bigint 后端线程ID。
+start_time timestamp with time zone 语句执行的开始时间。
+min_cpu_time bigint 语句在数据库节点上的最小CPU时间，单位为ms。
+max_cpu_time bigint 语句在数据库节点上的最大CPU时间，单位为ms。
+total_cpu_time bigint 语句在数据库节点上的CPU总时间，单位为ms。
+query text 正在执行的语句。
+node_group text 语句所属用户对应的逻辑openGauss。
+top_cpu_dn text cpu使用量topN信息。

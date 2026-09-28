@@ -1,0 +1,183 @@
+# 容器镜像安装
+
+本章节主要介绍如何获取openGauss数据库镜像，并通过Docker安装，以便用户能快速开启数据库之旅。openGauss镜像主要有两种获取方式，分别可以通过dockerhub和官网获取对应镜像，下面将详细介绍这两种获取路径对应的安装方式。
+
+## 1. dockerhub获取镜像并安装
+
+- 拉取dockerhub镜像
+
+```bash
+$ docker pull opengauss/opengauss-server:latest
+```
+
+>[!NOTE]说明
+>
+> 国内网络环境可能无法直连 Docker Hub，导致`docker pull`超时或失败，可以通过以下方式拉取quay.io镜像：
+>
+> ```bash
+> $ docker pull quay.io/opengauss/opengauss-server:latest
+> $ docker tag quay.io/opengauss/opengauss-server:latest opengauss/opengauss-server:latest
+> ```
+
+- 验证镜像状态
+
+```bash
+$ docker images
+
+REPOSITORY                   TAG                 IMAGE ID            CREATED             SIZE
+opengauss/opengauss-server   latest              9763e8b26794        2 days ago          1.77GB
+```
+
+- 运行容器
+
+启动数据库并映射宿主机的端口到容器：
+
+```bash
+$ docker run --name opengauss --privileged=true -d -e GS_PASSWORD=xxxxxx -p 8888:5432 opengauss/opengauss-server:latest
+```
+
+## 2. 官网下载镜像并安装
+
+- 下载镜像包
+
+以arm架构下对应的包为例，镜像包的架构应与主机架构匹配。
+
+``` bash
+$ wget https://opengauss.obs.cn-south-1.myhuaweicloud.com/7.0.0-RC3/openEuler22.03/arm/openGauss-Docker-7.0.0-RC3-aarch64.tar
+```
+
+x86_64镜像下载方式相同，镜像包获取路径为：https://opengauss.obs.cn-south-1.myhuaweicloud.com/7.0.0-RC3/openEuler22.03/x86/openGauss-Docker-7.0.0-RC3-x86_64.tar
+
+>[!NOTE]说明
+>
+> 每个架构只有一个容器镜像，由于容器内的系统是基于openEuler22.03的，因此将容器镜像放在openEuler22.03目录下，但可以用于其他操作系统中。
+
+- 加载镜像
+
+``` bash
+$ docker load -i openGauss-Docker-7.0.0-RC3-aarch64.tar
+```
+
+- 验证镜像状态
+
+加载完成后，请使用`docker images`查看实际镜像名。镜像名可能为`opengauss:7.0.0-RC3`（以实际输出为准），后续`docker run`需使用该镜像名。
+
+```bash
+$ docker images
+
+REPOSITORY                   TAG                 IMAGE ID            CREATED             SIZE
+opengauss                    7.0.0-RC3           9763e8b26794        2 days ago          1.77GB
+```
+
+>[!NOTE]说明
+>
+> 以上镜像包会周期性更新，可以根据自身需求修改路径获取最新镜像包。
+
+> 官网下载加载的镜像名（如`opengauss:7.0.0-RC3`）与 dockerhub 镜像名（`opengauss/opengauss-server:latest`）不同，请勿混用。
+
+- 运行容器
+
+启动数据库并映射宿主机的端口到容器（镜像名以`docker images`实际输出为准）：
+
+```bash
+$ docker run --name opengauss --privileged=true -d -e GS_PASSWORD=xxxxxx -p 8888:5432 opengauss:7.0.0-RC3
+```
+
+### 启动参数
+
+- `--name opengauss`：为容器命名为`opengauss`
+- `--privileged=true`: 授予容器特权模式
+- `-d`: 以后台模式运行容器
+- `-p 8888:5432`: 将容器的5432端口映射到宿主机的8888端口
+
+#### 必选容器内环境变量
+
+- `-e GS_PASSWORD=xxxxxx`：设置数据库超级用户`omm`密码
+
+使用 openGauss 镜像的时候，必须设置该参数，且不能为空或未定义。该参数用于设置 openGauss 数据库的超级用户`omm`。安装过程中将默认创建omm超级用户，该用户名目前无法更改。
+
+openGauss 镜像配置了本地信任机制，因此在容器内连接数据库时无需密码，但若从容器外部（其它主机或者容器）连接，则必须要输入密码。
+
+#### **密码要求**
+
+- 密码长度必须至少为8个字符。
+- 必须同时包含大写字母、小写字母、数字、以及特殊符号。
+- 支持的特殊符号仅包含`\#?!@$%^&\*-`（其中`!$&`需使用转义符号”\“)。
+
+#### 可选容器内环境变量
+
+- `-e GS_NODENAME=YourNodeName`：指定数据库节点名称，默认为`gaussdb`
+- `-e GS_USERNAME=YourUserName`：指定数据库连接用户名，默认为测试用户`gaussdb`
+- `-e GS_USER_PASSWORD=xxxxxx`：指定用户`$GS_USERNAME`密码，默认为`$GS_PASSWORD`
+- `-e GS_PORT=YourPort`：指定容器内数据库端口，默认为`5432`
+- `-e GS_DB=YourDbName`：在容器内创建数据库，默认为`postgres`
+
+## 3. 容器运行测试
+
+### 验证容器运行状态
+
+```bash
+$ docker ps
+```
+
+输出示例：
+
+```txt
+CONTAINER ID        IMAGE                               COMMAND                  CREATED              STATUS              PORTS                    NAMES
+7abc538f242a        opengauss/opengauss-server:latest   "entrypoint.sh gauss…"   About a minute ago   Up About a minute   0.0.0.0:8888->5432/tcp   opengauss
+```
+
+### 容器内部连接数据库
+
+进入容器：
+
+```bash
+$ docker exec -it  bash
+```
+
+登录`omm`超级用户：
+
+```bash
+$ su - omm
+$ gsql -d postgres -p 5432
+```
+
+### 从宿主机连接数据库
+
+宿主机可以通过以下命令连接数据库（需安装`gsql`客户端）：
+
+```shell
+$ gsql -d postgres -U gaussdb -W YourPassoword -h your-host-ip -p 8888
+```
+
+## 4. 其他配置
+
+### 数据持久化
+
+通过以下命令，将宿主机的`/opengauss`目录挂载到容器的`/var/lib/opengauss`目录，实现数据的持久化存储。镜像名需与前文加载或拉取的实际镜像名一致：
+
+```bash
+# dockerhub 镜像示例
+$ docker run --name opengauss --privileged=true -d -e GS_PASSWORD=xxxxxx -v /opengauss:/var/lib/opengauss opengauss/opengauss-server:latest
+
+# 官网下载镜像示例（以 docker images 实际输出为准）
+$ docker run --name opengauss --privileged=true -d -e GS_PASSWORD=xxxxxx -v /opengauss:/var/lib/opengauss opengauss:7.0.0-RC3
+```
+
+### 参数配置
+
+容器内的配置文件路径：
+
+```bash
+/var/lib/opengauss/data/postgresql.conf
+```
+
+修改完配置文件后，请使用以下命令重启容器以使更改生效：
+
+```bash
+docker restart
+```
+
+若在容器外配置参数，需要挂载宿主机路径到容器内部的`/var/lib/opengauss`目录。
+
+有关具体参数的修改，请参考 **[GUC参数说明](../database_reference/guc_parameter_usage.md)**

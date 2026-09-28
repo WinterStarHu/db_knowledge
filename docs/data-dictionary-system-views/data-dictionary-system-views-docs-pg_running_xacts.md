@@ -1,0 +1,17 @@
+# PG\_RUNNING\_XACTS
+
+PG\_RUNNING\_XACTS视图主要功能是显示当前节点运行事务的信息。
+
+**表 1**  PG\_RUNNING\_XACTS字段
+
+handle integer 事务对应的事务管理器中的槽位句柄，该值恒为-1。
+gxid xid 事务id号。
+state tinyint 事务状态（3：prepared或者0：starting）。
+node text 节点名称。
+xmin xid 节点上当前数据涉及的最小事务号xmin。
+vacuum boolean 标志当前事务是否是lazy vacuum事务。
+t（true）：表示是。f（false）：表示否。
+timeline bigint 标志数据库重启次数。
+prepare_xid xid 处于prepared状态的事务的id号，若不在prepared状态，值为0。
+pid bigint 事务对应的线程id。
+next_xid xid 其余节点发送给当前节点的事务id，该值恒为0。

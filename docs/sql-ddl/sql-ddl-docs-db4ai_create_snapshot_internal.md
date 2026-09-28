@@ -1,0 +1,12 @@
+# DB4AI.CREATE\_SNAPSHOT\_INTERNAL
+
+CREATE\_SNAPSHOT\_INTERNAL是db4ai.create\_snapshot函数的内置执行函数。函数存在信息校验，无法直接调用。
+
+**表 1**  DB4AI.CREATE\_SNAPSHOT\_INTERNAL入参和返回值列表
+
+s_id IN BIGINT 快照ID。
+i_schema IN NAME 快照存储的名字空间。
+i_name IN NAME 快照名称。
+i_commands IN TEXT[] 定义数据获取的SQL命令。
+i_comment IN TEXT 快照描述。
+i_owner IN NAME 快照拥有者。

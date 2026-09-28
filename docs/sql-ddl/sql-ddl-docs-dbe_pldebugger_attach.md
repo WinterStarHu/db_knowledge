@@ -1,0 +1,14 @@
+# DBE\_PLDEBUGGER.attach
+
+server端执行存储过程，停在第一条语句前，等待debug端关联。debug端调用attach，传入nodename和port，关联到该存储过程上。
+
+如果调试过程中报错，attach会自动失效；如果调试过程中attach到其他存储过程上，当前attach的调试也会失效。
+
+**表 1**  attach 入参和返回值列表
+
+nodename IN text 节点名称。
+port IN integer 连接端口号。
+funcoid OUT oid 函数id。
+funcname OUT text 函数名。
+lineno OUT integer 当前调试运行的下一行行号。
+query OUT text 当前调试的下一行函数源码。

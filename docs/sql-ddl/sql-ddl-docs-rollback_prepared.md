@@ -1,0 +1,26 @@
+# ROLLBACK PREPARED
+
+## 功能描述
+
+取消一个先前为两阶段提交准备好的事务。
+
+## 注意事项
+
+- 要想回滚一个预备事务，必须是最初发起事务的用户，或者是系统管理员。
+- 事务功能由数据库自动维护，不应显式使用事务功能。
+
+## 语法格式
+
+```
+ROLLBACK PREPARED transaction_id ;
+```
+
+## 参数说明
+
+**transaction\_id**
+
+待提交事务的标识符。它不能和任何当前预备事务已经使用了的标识符同名。
+
+## 相关链接
+
+[COMMIT PREPARED](commit_prepared.md)，[PREPARE TRANSACTION](prepare_transaction.md)。

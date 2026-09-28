@@ -1,0 +1,9 @@
+# kadmin.local
+
+## 功能介绍
+
+为openGauss认证服务Kerberos提供命令行接口，直接接入kdc服务的数据库，进行增加、删除、修改Kerberos用户等操作。
+
+## 参数说明
+
+Kerberos工具为开源第三方提供，具体参数说明请参考Kerberos官方文档：[https://web.mit.edu/kerberos/krb5-1.17/doc/admin/admin\_commands/index.html](https://web.mit.edu/kerberos/krb5-1.17/doc/admin/admin_commands/index.html)

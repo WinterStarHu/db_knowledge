@@ -1,0 +1,44 @@
+# SQLColAttribute
+
+## 功能描述
+
+返回结果集中一列的描述符信息。
+
+## 原型
+
+```
+SQLRETURN SQLColAttibute(SQLHSTMT        StatementHandle,
+                         SQLUSMALLINT    ColumnNumber,
+                         SQLUSMALLINT    FieldIdentifier,
+                         SQLPOINTER      CharacterAtrriburePtr,
+                         SQLSMALLINT     BufferLength,
+                         SQLSMALLINT     *StringLengthPtr,
+                         SQLLEN       *NumericAttributePtr);
+```
+
+## 参数
+
+**表 1**  SQLColAttribute参数
+
+关键字 参数说明 StatementHandle 语句句柄。
+ColumnNumber 要检索字段的列号，起始为1，依次递增。
+FieldIdentifier IRD中ColumnNumber行的字段。
+CharacterAttributePtr 输出参数：一个缓冲区指针，返回FieldIdentifier字段值。
+BufferLength 如果FieldIdentifier是一个ODBC定义的字段，而且CharacterAttributePtr指向一个字符串或二进制缓冲区，则此参数为该缓冲区的长度。如果FieldIdentifier是一个ODBC定义的字段，而且CharacterAttributePtr指向一个整数，则会忽略该字段。
+StringLengthPtr 输出参数：缓冲区指针，存放*CharacterAttributePtr中字符类型数据的字节总数，对于非字符类型，忽略BufferLength的值。
+NumericAttributePtr 输出参数：指向一个整型缓冲区的指针，返回IRD中ColumnNumber行FieldIdentifier字段的值。
+
+## 返回值
+
+- SQL\_SUCCESS：表示调用正确。
+- SQL\_SUCCESS\_WITH\_INFO：表示会有一些警告信息。
+- SQL\_ERROR：表示比较严重的错误，如：内存分配失败、建立连接失败等。
+- SQL\_INVALID\_HANDLE：表示调用无效句柄。其他API的返回值同理。
+
+## 注意事项
+
+当SQLColAttribute返回SQL\_ERROR或SQL\_SUCCESS\_WITH\_INFO时，通过调用[SQLGetDiagRec](sqlgetdiagrec.md)函数，并将HandleType和Handle参数设置为SQL\_HANDLE\_STMT和StatementHandle，可得到一个相关的SQLSTATE值，通过SQLSTATE值可以查出调用此函数的具体信息。
+
+## 示例
+
+参见：[示例](example_odbc.md)

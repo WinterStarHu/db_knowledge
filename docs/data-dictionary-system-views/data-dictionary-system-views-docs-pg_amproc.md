@@ -1,0 +1,14 @@
+# PG\_AMPROC
+
+PG\_AMPROC系统表存储有关与访问方法操作符族相关联的支持过程的信息。每个属于某个操作符族的支持过程都占有一行。
+
+**表 1**  PG\_AMPROC字段
+
+oid oid 行标识符（隐含属性，必须明确选择）。
+amprocfamily oid PG_OPFAMILY.oid 该项的操作符族。
+amproclefttype oid PG_TYPE.oid 相关操作符的左输入数据类型。可能取值及其描述见于系统表pg_type或查看源码中的pg_type.h文件。
+amprocrighttype oid PG_TYPE.oid 相关操作符的右输入数据类型。可能取值及其描述见于系统表pg_type或查看源码中的pg_type.h文件。
+amprocnum smallint 支持过程编号。
+amproc regproc PG_PROC .proname 过程的OID。
+
+amproclefttype和amprocrighttype字段的习惯解释，标识一个特定支持过程支持的操作符的左和右输入类型。对于某些访问方式，匹配支持过程本身的输入数据类型，对其他的则不这样。有一个对索引的“缺省”支持过程的概念，amproclefttype和amprocrighttype都等于索引操作符类的opcintype。

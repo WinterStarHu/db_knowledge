@@ -1,0 +1,235 @@
+# 示例
+
+## 常用功能示例代码
+
+```
+// 此示例演示如何通过ODBC方式获取openGauss中的数据。
+// DBtest.c (compile with: libodbc.so)
+#include
+#include
+#include
+#ifdef WIN32
+#include
+#endif
+SQLHENV       V_OD_Env;        // Handle ODBC environment
+SQLHSTMT      V_OD_hstmt;      // Handle statement
+SQLHDBC       V_OD_hdbc;       // Handle connection
+char          typename[100];
+SQLINTEGER    value = 100;
+SQLINTEGER    V_OD_erg,V_OD_buffer,V_OD_err,V_OD_id;
+int main(int argc,char *argv[])
+{
+      // 1. 申请环境句柄
+      V_OD_erg = SQLAllocHandle(SQL_HANDLE_ENV,SQL_NULL_HANDLE,&V_OD_Env);
+      if ((V_OD_erg != SQL_SUCCESS) && (V_OD_erg != SQL_SUCCESS_WITH_INFO))
+      {
+           printf("Error AllocHandle\n");
+           exit(0);
+      }
+      // 2. 设置环境属性（版本信息）
+      SQLSetEnvAttr(V_OD_Env, SQL_ATTR_ODBC_VERSION, (void*)SQL_OV_ODBC3, 0);
+      // 3. 申请连接句柄
+      V_OD_erg = SQLAllocHandle(SQL_HANDLE_DBC, V_OD_Env, &V_OD_hdbc);
+      if ((V_OD_erg != SQL_SUCCESS) && (V_OD_erg != SQL_SUCCESS_WITH_INFO))
+      {
+           SQLFreeHandle(SQL_HANDLE_ENV, V_OD_Env);
+           exit(0);
+      }
+      // 4. 设置连接属性
+      SQLSetConnectAttr(V_OD_hdbc, SQL_ATTR_AUTOCOMMIT, SQL_AUTOCOMMIT_ON, 0);
+      // 5. 连接数据源，这里的“userName”与“password”分别表示连接数据库的用户名和用户密码，请根据实际情况修改。
+      // 如果odbc.ini文件中已经配置了用户名密码，那么这里可以留空（""）；但是不建议这么做，因为一旦odbc.ini权限管理不善，将导致数据库用户密码泄露。
+      V_OD_erg = SQLConnect(V_OD_hdbc, (SQLCHAR*) "gaussdb", SQL_NTS,
+                           (SQLCHAR*) "userName", SQL_NTS,  (SQLCHAR*) "password", SQL_NTS);
+      if ((V_OD_erg != SQL_SUCCESS) && (V_OD_erg != SQL_SUCCESS_WITH_INFO))
+      {
+          printf("Error SQLConnect %d\n",V_OD_erg);
+          SQLFreeHandle(SQL_HANDLE_ENV, V_OD_Env);
+          exit(0);
+      }
+      printf("Connected !\n");
+      // 6. 设置语句属性
+      SQLSetStmtAttr(V_OD_hstmt,SQL_ATTR_QUERY_TIMEOUT,(SQLPOINTER *)3,0);
+      // 7. 申请语句句柄
+      SQLAllocHandle(SQL_HANDLE_STMT, V_OD_hdbc, &V_OD_hstmt);
+      // 8. 直接执行SQL语句。
+      SQLExecDirect(V_OD_hstmt,"drop table IF EXISTS customer_t1",SQL_NTS);
+      SQLExecDirect(V_OD_hstmt,"CREATE TABLE customer_t1(c_customer_sk INTEGER, c_customer_name VARCHAR(32));",SQL_NTS);
+      SQLExecDirect(V_OD_hstmt,"insert into customer_t1 values(25,li)",SQL_NTS);
+      // 9. 准备执行
+      SQLPrepare(V_OD_hstmt,"insert into customer_t1 values(?)",SQL_NTS);
+      // 10. 绑定参数
+      SQLBindParameter(V_OD_hstmt,1,SQL_PARAM_INPUT,SQL_C_SLONG,SQL_INTEGER,0,0,
+                       &value,0,NULL);
+      // 11. 执行准备好的语句
+      SQLExecute(V_OD_hstmt);
+      SQLExecDirect(V_OD_hstmt,"select id from testtable",SQL_NTS);
+      // 12. 获取结果集某一列的属性
+      SQLColAttribute(V_OD_hstmt,1,SQL_DESC_TYPE,typename,100,NULL,NULL);
+      printf("SQLColAtrribute %s\n",typename);
+      // 13. 绑定结果集
+      SQLBindCol(V_OD_hstmt,1,SQL_C_SLONG, (SQLPOINTER)&V_OD_buffer,150,
+                (SQLLEN *)&V_OD_err);
+      // 14. 通过SQLFetch取结果集中数据
+      V_OD_erg=SQLFetch(V_OD_hstmt);
+      // 15. 通过SQLGetData获取并返回数据。
+      while(V_OD_erg != SQL_NO_DATA)
+      {
+          SQLGetData(V_OD_hstmt,1,SQL_C_SLONG,(SQLPOINTER)&V_OD_id,0,NULL);
+          printf("SQLGetData ----ID = %d\n",V_OD_id);
+          V_OD_erg=SQLFetch(V_OD_hstmt);
+      };
+      printf("Done !\n");
+      // 16. 断开数据源连接并释放句柄资源
+      SQLFreeHandle(SQL_HANDLE_STMT,V_OD_hstmt);
+      SQLDisconnect(V_OD_hdbc);
+      SQLFreeHandle(SQL_HANDLE_DBC,V_OD_hdbc);
+      SQLFreeHandle(SQL_HANDLE_ENV, V_OD_Env);
+      return(0);
+ }
+```
+
+## 批量绑定示例代码
+
+```
+/**********************************************************************
+* 请在数据源中打开UseBatchProtocol，同时指定数据库中参数support_batch_bind为on
+* 此示例将数据批量入库到test_odbc_batch_insert中
+***********************************************************************/
+#include
+#include
+#include
+#include
+#include
+
+void Exec(SQLHDBC hdbc, SQLCHAR* sql)
+{
+    SQLRETURN retcode;                  // Return status
+    SQLHSTMT hstmt = SQL_NULL_HSTMT;    // Statement handle
+
+    // Allocate Statement Handle
+    retcode = SQLAllocHandle(SQL_HANDLE_STMT, hdbc, &hstmt);
+    if (retcode != SQL_SUCCESS && retcode != SQL_SUCCESS_WITH_INFO)
+    {
+        printf("Failed to allocate statement handle.\n");
+        SQLFreeHandle(SQL_HANDLE_DBC, hdbc);
+    }
+
+    // Prepare Statement
+    SQLPrepare(hstmt, (SQLCHAR*) sql, SQL_NTS);
+    printf("SQLPrepare log: %s\n", (char*)sql);
+
+    // Execute Statement
+    SQLExecute(hstmt);
+    printf("SQLExecute stmt log: %s\n", (char*)sql);
+
+    // Free Handle
+    SQLFreeHandle(SQL_HANDLE_STMT, hstmt);
+    printf("SQLFreeHandle stmt log: %s\n", (char*)sql);
+}
+
+int main ()
+{
+    SQLHENV  henv  = SQL_NULL_HENV;
+    SQLHDBC  hdbc  = SQL_NULL_HDBC;
+    int      batchCount = 100;
+    SQLLEN   rowsCount = 0;
+    SQLRETURN   retcode;
+    SQLCHAR     dsn[1024] = {"opengaussdb\0"};
+
+    retcode = SQLAllocHandle(SQL_HANDLE_ENV, SQL_NULL_HANDLE, &henv);
+    if (retcode != SQL_SUCCESS && retcode != SQL_SUCCESS_WITH_INFO)
+    {
+        printf("Failed to allocate environment handle.\n");
+        return SQL_ERROR;
+    }
+
+    // Set ODBC Verion
+    SQLSetEnvAttr(henv, SQL_ATTR_ODBC_VERSION, (SQLPOINTER*)SQL_OV_ODBC3, 0);
+    // Allocate Connection
+    SQLAllocHandle(SQL_HANDLE_DBC, henv, &hdbc);
+    // Set Login Timeout
+    SQLSetConnectAttr(hdbc, SQL_LOGIN_TIMEOUT, (SQLPOINTER)5, 0);
+    // Set Auto Commit
+    SQLSetConnectAttr(hdbc, SQL_ATTR_AUTOCOMMIT, (SQLPOINTER)(1), 0);
+    // Connect to DSN
+    SQLConnect(hdbc, (SQLCHAR*) dsn, SQL_NTS, (SQLCHAR*) NULL, 0, NULL, 0);
+    // init table info.
+    Exec(hdbc, "drop table if exists test_odbc_batch_insert");
+    Exec(hdbc, "create table test_odbc_batch_insert(id int primary key, col varchar2(50))");
+
+    // 下面的代码根据用户输入的数据量，构造出将要入库的数据:
+    {
+        SQLRETURN retcode;
+        SQLHSTMT hstmtinesrt = SQL_NULL_HSTMT;
+        SQLCHAR      *sql = NULL;
+        SQLINTEGER   *ids  = NULL;
+        SQLCHAR      *cols = NULL;
+        SQLLEN       *bufLenIds = NULL;
+        SQLLEN       *bufLenCols = NULL;
+        SQLUSMALLINT *operptr = NULL;
+        SQLULEN      process = 0;
+
+        // 这里是按列构造，每个字段的内存连续存放在一起。
+        ids = (SQLINTEGER*)malloc(sizeof(ids[0]) * batchCount);
+        cols = (SQLCHAR*)malloc(sizeof(cols[0]) * batchCount * 50);
+        // 这里是每个字段中，每一行数据的内存长度。
+        bufLenIds = (SQLLEN*)malloc(sizeof(bufLenIds[0]) * batchCount);
+        bufLenCols = (SQLLEN*)malloc(sizeof(bufLenCols[0]) * batchCount);
+        if (NULL == ids || NULL == cols || NULL == bufLenCols || NULL == bufLenIds)
+        {
+            printf("malloc data memory failed.\n");
+            goto exit;
+        }
+
+        for (int i = 0; i < batchCount; i++)
+        {
+            ids[i] = i;
+            sprintf(cols + 50 * i, "column test value %d", i);
+            bufLenIds[i] = sizeof(ids[i]);
+            bufLenCols[i] = strlen(cols + 50 * i);
+        }
+
+        // Allocate Statement Handle
+        retcode = SQLAllocHandle(SQL_HANDLE_STMT, hdbc, &hstmtinesrt);
+        if (retcode != SQL_SUCCESS && retcode != SQL_SUCCESS_WITH_INFO)
+        {
+            printf("Failed to allocate statement handle.\n");
+            SQLFreeHandle(SQL_HANDLE_DBC, hdbc);
+            SQLFreeHandle(SQL_HANDLE_ENV, henv);
+            return SQL_ERROR;
+        }
+
+        // Prepare Statement
+        sql = (SQLCHAR*)"insert into test_odbc_batch_insert values(?, ?)";
+        SQLPrepare(hstmtinesrt, (SQLCHAR*) sql, SQL_NTS);
+        printf("SQLPrepare log: %s\n", (char*)sql);
+
+        SQLSetStmtAttr(hstmtinesrt, SQL_ATTR_PARAMSET_SIZE, (SQLPOINTER)batchCount, sizeof(batchCount));
+        SQLBindParameter(hstmtinesrt, 1, SQL_PARAM_INPUT, SQL_C_SLONG, SQL_INTEGER, sizeof(ids[0]), 0,&(ids[0]), 0, bufLenIds);
+        SQLBindParameter(hstmtinesrt, 2, SQL_PARAM_INPUT, SQL_C_CHAR, SQL_CHAR, 50, 50, cols, 50, bufLenCols);
+        SQLSetStmtAttr(hstmtinesrt, SQL_ATTR_PARAMS_PROCESSED_PTR, (SQLPOINTER)&process, sizeof(process));
+
+        SQLExecute(hstmtinesrt);
+        printf("SQLExecute stmt log: %s\n", (char*)sql);
+        SQLRowCount(hstmtinesrt, &rowsCount);
+        SQLFreeHandle(SQL_HANDLE_STMT, hstmtinesrt);
+        printf("SQLFreeHandle hstmtinesrt\n");
+    }
+
+exit:
+    printf ("\nComplete.\n");
+
+    // Connection
+    if (hdbc != SQL_NULL_HDBC) {
+        SQLDisconnect(hdbc);
+        SQLFreeHandle(SQL_HANDLE_DBC, hdbc);
+    }
+
+    // Environment
+    if (henv != SQL_NULL_HENV)
+        SQLFreeHandle(SQL_HANDLE_ENV, henv);
+
+    return 0;
+}
+```

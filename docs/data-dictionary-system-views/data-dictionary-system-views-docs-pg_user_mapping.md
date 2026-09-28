@@ -1,0 +1,12 @@
+# PG\_USER\_MAPPING
+
+PG\_USER\_MAPPING系统表存储从本地用户到远程的映射。
+
+需要有系统管理员权限才可以访问此系统表。普通用户可以使用视图[PG\_USER\_MAPPINGS](pg_user_mappings.md)进行查询。
+
+**表 1**  PG\_USER\_MAPPING字段
+
+oid oid 行标识符（隐含属性，必须明确选择）。
+umuser oid PG_AUTHID.oid 被映射的本地用户的OID，如果用户映射是公共的则为0。
+umserver oid PG_FOREIGN_SERVER.oid 包含这个映射的外部服务器的OID。
+umoptions text[] 用户映射指定选项，使用“keyword=value”格式的字符串。

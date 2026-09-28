@@ -1,0 +1,33 @@
+# PQgetvalue
+
+## 功能描述
+
+返回一个PGresult的一行的单一域值。行和列号从 0 开始。调用者不应该直接释放该结果。它将在相关的PGresult句柄被传递给PQclear之后被释放。
+
+## 原型
+
+```
+char *PQgetvalue(const PGresult *res,
+                 int row_number,
+                 int column_number);
+```
+
+## 参数
+
+**表 1** PQgetvalue参数
+
+关键字 参数说明 res 操作结果句柄。
+row_number 行数。
+column_number 列数。
+
+## 返回值
+
+对于文本格式的数据，PQgetvalue返回的值是该域值的一种空值结束的字符串表示。
+
+对于二进制格式的数据，该值是由该数据类型的typsend和typreceive函数决定的二进制表示。
+
+如果该域值为空，则返回一个空串。
+
+## 示例
+
+参见：[示例](example_libpq.md)

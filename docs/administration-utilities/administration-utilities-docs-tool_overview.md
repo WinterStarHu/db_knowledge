@@ -1,0 +1,23 @@
+# 工具一览表
+
+openGauss提供客户端和服务器端应用程序（工具），帮助用户更好地维护openGauss，提供的所有工具如[表1](#zh-cn_topic_0287276012_zh-cn_topic_0237152139_table11292939125111)所示。工具位于安装数据库服务器的$GPHOME/script和$GAUSSHOME/bin路径下。
+
+**表 1**  工具一览表
+
+工具名称 客户端工具 gsql gsql是openGauss提供在命令行下运行的数据库连接工具，可以通过此工具连接服务器并对其进行操作和维护，除了具备操作数据库的基本功能，gsql还提供了若干高级特性，便于用户使用。
+服务端工具 gs_cgroup gs_cgroup是openGauss提供的负载管理工具。负责创建默认控制组、创建用户自定义控制组、删除用户自定义控制组、更新用户自定义控制组的资源配额和资源限额、显示控制组配置文件内容、显示控制组树形结构和删除用户的所有控制组。
+gs_check gs_check改进增强，统一化当前系统中存在的各种检查工具，例如gs_check、gs_checkos等，帮助用户在openGauss运行过程中，全量的检查openGauss运行环境，操作系统环境，网络环境及数据库执行环境，也有助于在openGauss重大操作之前对各类环境进行全面检查，有效保证操作执行成功。
+gs_checkos gs_checkos用于检查操作系统、控制参数、磁盘配置等内容，并对系统控制参数、I/O配置、网络配置和THP服务等信息进行配置。
+gs_checkperf gs_checkperf工具可定期对openGauss级别（主机CPU占用率、Gauss CPU占用率、I/O使用情况等）、节点级别（CPU使用情况、内存使用情况、I/O使用情况）、会话/进程级别（CPU使用情况、内存使用情况、I/O使用情况）、SSD性能（写入、读取性能）进行检查，让用户了解openGauss的负载情况，采取对应的改进措施。
+gs_collector gs_collector在openGauss发生故障时，收集OS信息、日志信息以及配置文件信息，来定位问题。
+gs_dump gs_dump是一款用于导出数据库相关信息的工具，支持导出完整一致的数据库对象（数据库、模式、表、视图等）数据，同时不影响用户对数据库的正常访问。
+gs_dumpall gs_dumpall是一款用于导出数据库相关信息的工具，支持导出完整一致的openGauss数据库所有数据，同时不影响用户对数据库的正常访问。
+gs_guc gs_guc用于设置openGauss配置文件（“postgresql.conf”、“pg_hba.conf”）中的参数，配置文件中参数的默认值是单机的配置模式，您可以使用gs_guc来设置适合的参数值。
+gs_encrypt gs_encrypt是一款用于为输入的明文字符串进行加密操作。
+gs_om openGauss提供了gs_om工具帮助对openGauss进行维护，包括启动openGauss、停止openGauss、查询openGauss状态、生成静态配置文件、刷新动态配置文件、SSL证书替换、启停kerberos认证、显示帮助信息和显示版本号信息的功能。
+gs_plan_simulator gs_plan_simulator工具用于收集与执行计划相关的数据并能够在其它环境上进行执行计划的复现，从而定位执行计划类相关问题。
+gs_restore gs_restore是openGauss提供的针对gs_dump导出数据的导入工具。通过此工具可由gs_dump生成的导出文件进行导入。
+gs_ssh openGauss提供了gs_ssh工具帮助用户在openGauss各节点上执行相同的命令。
+gs_sdr openGauss提供了gs_sdr工具，在不借助额外存储介质的情况下实现跨region的异地容灾。提供流式容灾搭建，灾备升主，计划内主备切换，容灾解除、容灾状态监控功能、显示帮助信息和显示版本号信息等功能。
+gs_retrieve 在openGauss主备的架构下，当主机异常宕机，需要异步备升主时，旧主可能有数据未同步到异步备。gs_retrieve工具可以在旧主恢复之后，将未同步的数据通过逻辑解码的方式找回。
+gs_ddr openGauss提供了gs_ddr工具，可完成容灾搭建、容灾升主、计划内主备切换、容灾解除、容灾状态监控功能、显示帮助信息和显示版本号信息等功能。

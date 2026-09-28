@@ -1,0 +1,24 @@
+# SUMMARY\_STATIO\_USER\_TABLES
+
+SUMMARY\_STATIO\_USER\_TABLES视图显示openGauss内汇聚的命名空间中所有用户关系表的IO状态信息。
+
+示例：
+
+```sql
+openGauss=# select * from DBE_PERF.SUMMARY_STATIO_USER_TABLES;
+   schemaname    |    relname    | heap_blks_read | heap_blks_hit | idx_blks_read | idx_blks_hit | toast_blks_read | toast_blks_hit | tidx_blks_read | tidx_blks_hit
+-----------------+---------------+----------------+---------------+---------------+--------------+-----------------+----------------+----------------+---------------
+```
+
+**表 1**  SUMMARY\_STATIO\_USER\_TABLES字段
+
+schemaname name 该表模式名。
+relname name 表名。
+heap_blks_read numeric 从该表中读取的磁盘块数。
+heap_blks_hit numeric 此表缓存命中数。
+idx_blks_read numeric 从表中所有索引读取的磁盘块数。
+idx_blks_hit numeric 表中所有索引命中缓存数。
+toast_blks_read numeric 此表的TOAST表读取的磁盘块数（如果存在）。
+toast_blks_hit numeric 此表的TOAST表命中缓冲区数（如果存在）。
+tidx_blks_read numeric 此表的TOAST表索引读取的磁盘块数（如果存在）。
+tidx_blks_hit numeric 此表的TOAST表索引命中缓冲区数（如果存在）。

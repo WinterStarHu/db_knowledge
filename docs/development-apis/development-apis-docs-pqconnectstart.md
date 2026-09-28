@@ -1,0 +1,21 @@
+# PQconnectStart
+
+## 功能描述
+
+与数据库服务器建立一次非阻塞的连接。
+
+## 原型
+
+```
+PGconn* PQconnectStart(const char* conninfo);
+```
+
+## 参数
+
+**表 1**
+
+关键字 参数说明 conninfo 连接信息字符串。可以为空，这样将会使用默认参数。也可以包含由空格分隔的一个或多个参数设置，还可以包含一个URI。
+
+## 返回值
+
+PGconn类型指针。

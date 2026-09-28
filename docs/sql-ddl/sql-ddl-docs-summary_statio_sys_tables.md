@@ -1,0 +1,16 @@
+# SUMMARY\_STATIO\_SYS\_TABLES
+
+SUMMARY\_STATIO\_SYS\_TABLES视图显示openGauss内汇聚的命名空间中所有系统表的IO状态信息。
+
+**表 1**  SUMMARY\_STATIO\_SYS\_TABLES字段
+
+schemaname name 该表模式名。
+relname name 表名。
+heap_blks_read numeric 从该表中读取的磁盘块数。
+heap_blks_hit numeric 此表缓存命中数。
+idx_blks_read numeric 从表中所有索引读取的磁盘块数。
+idx_blks_hit numeric 表中所有索引命中缓存数。
+toast_blks_read numeric 此表的TOAST表读取的磁盘块数（如果存在）。
+toast_blks_hit numeric 此表的TOAST表命中缓冲区数（如果存在）。
+tidx_blks_read numeric 此表的TOAST表索引读取的磁盘块数（如果存在）。
+tidx_blks_hit numeric 此表的TOAST表索引命中缓冲区数（如果存在）。
