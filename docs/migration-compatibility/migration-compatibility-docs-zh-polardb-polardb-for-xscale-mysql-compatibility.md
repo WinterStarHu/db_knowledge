@@ -1,0 +1,622 @@
+# PolarDB-X标准版与企业版的MySQL兼容性-云原生数据库 PolarDB-阿里云
+
+> 来源: https://help.aliyun.com/zh/polardb/polardb-for-xscale/mysql-compatibility
+
+PolarDB-X标准版与企业版的MySQL兼容性-云原生数据库 PolarDB-阿里云
+
+大模型产品解决方案权益定价AI 应用市场伙伴服务了解阿里云
+
+查看 "" 全部搜索结果
+
+AI 助理文档备案控制台
+
+官方文档
+
+产品简介
+
+AI和智能体
+
+快速入门
+
+产品计费
+
+动态与公告
+
+用户指南
+
+开发指南
+
+SQL调优指南
+
+技术白皮书
+
+性能白皮书
+
+最佳实践
+
+分布式常见问题
+
+安全合规
+
+API参考
+
+错误码
+
+术语表
+
+相关协议
+
+PolarDB-X 1.0（DRDS）
+
+PolarDB分布式轻量版
+
+首页
+
+云原生数据库 PolarDB
+
+云原生数据库PolarDB分布式版
+
+产品简介
+
+MySQL兼容性
+
+MySQL兼容性
+
+更新时间：
+
+复制 MD 格式
+
+产品详情 我的收藏
+
+本文档旨在介绍PolarDB-X标准版和企业版与传统MySQL数据库之间的兼容性情况，帮助用户了解在迁移到PolarDB-X过程中可能面临的兼容性问题和相关解决方案。
+
+PolarDB-X是一款高性能、高可用性的分布式数据库产品，提供了与MySQL高度兼容的接口和功能，其主售形态主要分为标准版（集中式形态）和企业版（分布式形态）。作为一款旨在满足企业级应用场景需求的数据库解决方案，PolarDB-X标准版在保持MySQL易用性和灵活性的同时，100%兼容MySQL语法。此外企业版通过先进的分布式架构设计，在显著提升了数据库的扩展性、稳定性和可靠性的同时，高度兼容MySQL语法。
+标准版
+
+说明 标准版100%兼容MySQL，受限于云产品的安全要求，会主动限制控制类SQL的使用，主要体现在下表的高权限账号无权限执行该语句。
+
+SQL种类 SQL语法 是否兼容 备注
+
+数据库定义语句 ALTER DATABASE Y
+
+ALTER EVENT Y 高权限账号无权限执行该语句。
+
+ALTER FUNCTION Y
+
+ALTER INSTANCE Y 高权限账号无权限执行该语句。
+
+ALTER PROCEDURE Y
+
+ALTER SERVER Y 高权限账号无权限执行该语句。
+
+ALTER TABLE Y
+
+ALTER TABLESPACE Y 高权限账号无权限执行该语句。
+
+ALTER VIEW Y
+
+CREATE DATABASE Y
+
+CREATE EVENT Y
+
+CREATE FUNCTION Y
+
+CREATE INDEX Y
+
+CREATE PROCEDURE CREATE FUNCTION Y
+
+CREATE SERVER Y 高权限账号无权限执行该语句。
+
+CREATE SPATIAL REFERENCE SYSTEM Y 高权限账号无权限执行该语句。
+
+CREATE TABLE Y
+
+CREATE TABLESPACE Y 高权限账号无权限执行该语句。
+
+CREATE TRIGGER Y
+
+CREATE VIEW Y
+
+DROP DATABASE Y
+
+DROP EVENT Y
+
+DROP FUNCTION Y
+
+DROP INDEX Y
+
+DROP PROCEDURE DROP FUNCTION Y
+
+DROP SERVER Y 高权限账号无权限执行该语句。
+
+DROP SPATIAL REFERENCE SYSTEM Y 高权限账号无权限执行该语句。
+
+DROP TABLE Y
+
+DROP TRIGGER Y
+
+DROP VIEW Y
+
+RENAME TABLE Y
+
+TRUNCATE TABLE Y
+
+数据操作语句 CALL Y
+
+DELETE Y
+
+DO Y
+
+HANDLER Y
+
+IMPORT TABLE Y 高权限账号无权限执行该语句。
+
+INSERT Y
+
+INTERSECT子句 Y 不支持此功能。
+
+LOAD DATA Y 高权限账号无权限执行该语句，即无权限加载服务器端的文件。
+
+LOAD XML Y 高权限账号无权限执行该语句，即无权限加载服务器端的文件。
+
+REPLACE Y
+
+SELECT Y
+
+子查询 Y
+
+UPDATE Y
+
+UNION子句 Y
+
+WITH（公共表表达式） Y
+
+事务和锁定语句 START TRANSACTION、COMMIT和ROLLBACK语句 Y
+
+SAVEPOINT、ROLLBACK TO SAVEPOINT和RELEASE SAVEPOINT语句 Y
+
+LOCK INSTANCE FOR BACKUP和UNLOCK INSTANCE语句 Y 高权限账号无权限执行该语句。
+
+LOCK TABLES和UNLOCK TABLES Y
+
+SET TRANSACTION Y
+
+复制语句：用于控制副本服务器的SQL语句。
+CHANGE MASTER TO Y 高权限账号无权限执行该语句。
+
+CHANGE REPLICATION FILTER Y 高权限账号无权限执行该语句。
+
+CHANGE REPLICATION SOURCE TO Y 高权限账号无权限执行该语句。
+
+START REPLICA Y 高权限账号无权限执行该语句。
+
+START SLAVE Y 高权限账号无权限执行该语句。
+
+STOP REPLICA Y 高权限账号无权限执行该语句。
+
+STOP SLAVE Y 高权限账号无权限执行该语句。
+
+复制语句：用于控制组复制的SQL语句。
+START GROUP_REPLICATION Y 高权限账号无权限执行该语句。
+
+STOP GROUP_REPLICATION Y 高权限账号无权限执行该语句。
+
+预处理语句 PREPARE Y
+
+EXECUTE Y
+
+DEALLOCATE PREPARE Y
+
+数据库管理报表：账户管理报表 ALTER USER Y
+
+CREATE ROLE Y
+
+CREATE USER Y
+
+DROP ROLE Y
+
+DROP USER Y
+
+GRANT Y
+
+RENAME USER Y
+
+REVOKE Y
+
+SET DEFAULT ROLE Y
+
+SET PASSWORD Y
+
+SET ROLE Y
+
+数据库管理语句：表维护语句 ANALYZE TABLE Y
+
+CHECK TABLE Y
+
+CHECKSUM TABLE Y
+
+OPTIMIZE TABLE Y
+
+REPAIR TABLE Y
+
+数据库管理语句：组件、插件和可加载函数语句 可加载函数的CREATE FUNCTION语句 Y
+
+可加载函数的DROP FUNCTION语句 Y
+
+INSTALL COMPONENT Y
+
+INSTALL PLUGIN Y
+
+UNINSTALL COMPONENT Y
+
+UNINSTALL PLUGIN Y
+
+数据库管理语句：SET语句 SET语法 Y
+
+SET CHARACTER Y
+
+SET NAMES Y
+
+数据库管理语句：SHOW语句 SHOW BINARY LOGS Y 仅当拥有REPLICATION CLIENT权限的用户支持使用该语句。
+
+SHOW BINLOG EVENTS Y 仅当拥有REPLICATION SLAVE权限的用户支持使用该语句。
+
+SHOW CHARACTER SET Y
+
+SHOW COLLATION Y
+
+SHOW COLUMNS Y
+
+SHOW CREATE DATABASE Y
+
+SHOW CREATE EVENT Y
+
+SHOW CREATE PROCEDURE Y
+
+SHOW CREATE TABLE Y
+
+SHOW CREATE TRIGGER Y
+
+SHOW CREATE USER Y
+
+SHOW CREATE VIEW Y
+
+SHOW DATABASES Y
+
+SHOW ENGINES Y
+
+SHOW ERRORS Y
+
+SHOW EVENTS Y
+
+SHOW FUNCTION CODE Y
+
+SHOW FUNCTION STATUS Y
+
+SHOW GRANTS Y
+
+SHOW INDEX Y
+
+SHOW MASTER STATUS Y
+
+SHOW OPEN TABLES Y
+
+SHOW PLUGINS Y
+
+SHOW PRIVILEGES Y
+
+SHOW PROCEDURE CODE Y
+
+SHOW PROCEDURE STATUS Y
+
+SHOW PROCESSLIST Y
+
+SHOW PROFILE Y
+
+SHOW PROFILES Y
+
+SHOW SLAVE | REPLICA STATUS Y
+
+SHOW STATUS Y
+
+SHOW TABLE STATUS Y
+
+SHOW TABLES Y
+
+SHOW TRIGGERS Y
+
+SHOW VARIABLES Y
+
+SHOW WARNINGS Y
+
+实用程序语句 DESCRIBE Y
+
+EXPLAIN Y
+
+HELP Y
+
+USE Y
+
+企业版
+
+说明 企业版高度兼容MySQL，受限于分布式架构的复杂性，对于一些高级SQL特性，虽然功能上不支持，但是语法上依然支持，确保了对上下游生态的兼容。
+
+SQL种类 SQL语法 是否兼容 备注
+
+数据库定义语句 ALTER DATABASE Y
+
+ALTER EVENT N 不支持此功能
+
+ALTER FUNCTION Y
+
+ALTER INSTANCE N 不支持此功能
+
+ALTER PROCEDURE Y
+
+ALTER SERVER N 不支持此功能
+
+ALTER TABLE Y
+
+ALTER TABLESPACE N 不支持此功能
+
+ALTER VIEW Y
+
+CREATE DATABASE Y
+
+CREATE EVENT N 不支持此功能
+
+CREATE FUNCTION Y
+
+CREATE INDEX Y
+
+CREATE PROCEDURE CREATE FUNCTION Y
+
+CREATE SERVER N 不支持此功能
+
+CREATE SPATIAL REFERENCE SYSTEM N 不支持此功能
+
+CREATE TABLE Y
+
+CREATE TABLESPACE N 不支持此功能
+
+CREATE TRIGGER Y
+
+CREATE VIEW Y
+
+DROP DATABASE Y
+
+DROP EVENT N 不支持此功能
+
+DROP FUNCTION Y
+
+DROP INDEX Y
+
+DROP PROCEDURE DROP FUNCTION Y
+
+DROP SERVER N 不支持此功能
+
+DROP SPATIAL REFERENCE SYSTEM N 不支持此功能
+
+DROP TABLE Y
+
+DROP TRIGGER Y
+
+DROP VIEW Y
+
+RENAME TABLE Y
+
+TRUNCATE TABLE Y
+
+数据操作语句 CALL Y
+
+DELETE Y
+
+DO Y
+
+EXCEPT子句 Y
+
+HANDLER N 不支持此功能
+
+IMPORT TABLE N 不支持此功能
+
+INSERT Y
+
+INTERSECT子句 Y
+
+LOAD DATA N 支持，但默认关闭
+
+LOAD XML N 不支持此功能
+
+REPLACE Y
+
+SELECT Y
+
+子查询 Y
+
+UPDATE Y
+
+UNION子句 Y
+
+WITH（公共表表达式） Y
+
+事务和锁定语句 START TRANSACTION、COMMIT和ROLLBACK语句 Y
+
+SAVEPOINT、ROLLBACK TO SAVEPOINT和RELEASE SAVEPOINT语句 Y
+
+LOCK INSTANCE FOR BACKUP和UNLOCK INSTANCE语句 N 不支持此功能
+
+LOCK TABLES和UNLOCK TABLES N 不支持此功能
+
+SET TRANSACTION Y
+
+复制语句：用于控制副本服务器的SQL语句。
+CHANGE MASTER TO N 不支持此功能
+
+CHANGE REPLICATION FILTER N 不支持此功能
+
+CHANGE REPLICATION SOURCE TO N 不支持此功能
+
+START REPLICA N 不支持此功能
+
+START SLAVE N 不支持此功能
+
+STOP REPLICA N 不支持此功能
+
+STOP SLAVE N 不支持此功能
+
+复制语句：用于控制组复制的SQL语句。
+START GROUP_REPLICATION N 不支持此功能
+
+STOP GROUP_REPLICATION N 不支持此功能
+
+预处理语句 PREPARE Y
+
+EXECUTE Y
+
+DEALLOCATE PREPARE Y
+
+数据库管理报表：账户管理报表 ALTER USER Y
+
+CREATE ROLE Y
+
+CREATE USER Y
+
+DROP ROLE Y
+
+DROP USER Y
+
+GRANT Y
+
+RENAME USER Y
+
+REVOKE Y
+
+SET DEFAULT ROLE Y
+
+SET PASSWORD Y
+
+SET ROLE Y
+
+数据库管理语句：表维护语句 ANALYZE TABLE Y
+
+CHECK TABLE Y
+
+CHECKSUM TABLE Y
+
+OPTIMIZE TABLE Y
+
+REPAIR TABLE N 不支持此功能
+
+数据库管理语句：组件、插件和可加载函数语句 可加载函数的CREATE FUNCTION语句 Y
+
+可加载函数的DROP FUNCTION语句 Y
+
+INSTALL COMPONENT N 不支持此功能
+
+INSTALL PLUGIN N 不支持此功能
+
+UNINSTALL COMPONENT N 不支持此功能
+
+UNINSTALL PLUGIN N 不支持此功能
+
+数据库管理语句：SET语句 SET语法 Y
+
+SET CHARACTER Y
+
+SET NAMES Y
+
+数据库管理语句：SHOW语句 SHOW BINARY LOGS Y 仅拥有REPLICATION CLIENT权限的用户可以使用该语句。
+
+SHOW BINLOG EVENTS Y 仅拥有REPLICATION SLAVE权限的用户可以使用该语句。
+
+SHOW CHARACTER SET Y
+
+SHOW COLLATION Y
+
+SHOW COLUMNS Y
+
+SHOW CREATE DATABASE Y
+
+SHOW CREATE EVENT Y
+
+SHOW CREATE PROCEDURE Y
+
+SHOW CREATE TABLE Y
+
+SHOW CREATE TRIGGER Y
+
+SHOW CREATE USER Y
+
+SHOW CREATE VIEW Y
+
+SHOW DATABASES Y
+
+SHOW ENGINES Y
+
+SHOW ERRORS Y
+
+SHOW EVENTS Y
+
+SHOW FUNCTION CODE Y
+
+SHOW FUNCTION STATUS Y
+
+SHOW GRANTS Y
+
+SHOW INDEX Y
+
+SHOW MASTER STATUS Y
+
+SHOW OPEN TABLES Y
+
+SHOW PLUGINS Y
+
+SHOW PRIVILEGES Y
+
+SHOW PROCEDURE CODE Y
+
+SHOW PROCEDURE STATUS Y
+
+SHOW PROCESSLIST Y
+
+SHOW PROFILE Y
+
+SHOW PROFILES Y
+
+SHOW RELAYLOG EVENTS Y
+
+SHOW REPLICAS Y
+
+SHOW SLAVE HOSTS | SHOW REPLICAS N 不支持此功能
+
+SHOW REPLICA STATUS Y
+
+SHOW SLAVE | REPLICA STATUS Y
+
+SHOW STATUS Y
+
+SHOW TABLE STATUS Y
+
+SHOW TABLES Y
+
+SHOW TRIGGERS Y
+
+SHOW VARIABLES Y
+
+SHOW WARNINGS Y
+
+实用程序语句 DESCRIBE Y
+
+EXPLAIN Y
+
+HELP Y
+
+USE Y
+
+上一篇：产品系列下一篇：核心特性
+
+该文章对您有帮助吗？
+
+反馈
+
+为什么选择阿里云什么是云计算全球基础设施技术领先稳定可靠安全合规分析师报告 大模型大模型服务平台千问大模型模型市场 产品和定价全部产品免费试用产品动态产品定价配置报价器云上成本管理 技术内容技术解决方案帮助文档开发者社区天池大赛阿里云认证 权益免费试用解决方案免费试用高校计划推荐返现计划 服务基础服务企业增值服务迁云服务官网公告健康看板信任中心 关注阿里云 关注阿里云公众号或下载阿里云APP，关注云资讯，随时随地运维管控云服务 联系我们：4008013260 法律声明Cookies 政策廉正举报安全举报联系我们加入我们 友情链接阿里巴巴集团淘宝网千问AI平台千问办公天猫全球速卖通阿里巴巴国际交易市场1688阿里妈妈飞猪阿里云计算万网高德UC友盟优酷钉钉支付宝达摩院淘宝海外阿里云盘 © 2009-现在 Aliyun.com 版权所有 增值电信业务经营许可证： 浙B2-20080101 域名注册服务机构许可： 浙D3-20210002 浙公网安备 33010602009975号浙B2-20080101-4
