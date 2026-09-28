@@ -1,0 +1,61 @@
+# PostgreSQL: Documentation: 18: Preface
+
+PostgreSQL: Documentation: 18: Preface Home About Download Documentation Community Developers Support Donate Your account August 13, 2026: PostgreSQL 18.6, 17.11, 16.15, 15.19, 14.24 and 19 Beta 3 Released!
+Documentation → PostgreSQL 18 Supported Versions:
+Current (18) / 17 / 16 / 15 / 14 Development Versions:
+19 / devel Unsupported versions:
+13 / 12 / 11 / 10 /
+9.6
+/
+9.5
+/
+9.4
+/
+9.3
+/
+9.2
+/
+9.1
+/
+9.0
+/
+8.4
+/
+8.3
+/
+8.2
+/
+8.1
+/
+8.0
+/
+7.4
+/
+7.2
+/
+7.1
+Preface Prev Up PostgreSQL 18.6 Documentation Home Next Preface Table of Contents
+1. What Is PostgreSQL?
+2. A Brief History of PostgreSQL
+2.1. The Berkeley POSTGRES Project
+2.2. Postgres95
+2.3. PostgreSQL
+3. Conventions
+4. Further Information
+5. Bug Reporting Guidelines
+5.1. Identifying Bugs
+5.2. What to Report
+5.3. Where to Report Bugs
+This book is the official documentation of PostgreSQL. It has been written by the PostgreSQL developers and other volunteers in parallel to the development of the PostgreSQL software. It describes all the functionality that the current version of PostgreSQL officially supports.
+To make the large amount of information about PostgreSQL manageable, this book has been organized in several parts. Each part is targeted at a different class of users, or at users in different stages of their PostgreSQL experience:
+Part I is an informal introduction for new users.
+Part II documents the SQL query language environment, including data types and functions, as well as user-level performance tuning. Every PostgreSQL user should read this.
+Part III describes the installation and administration of the server. Everyone who runs a PostgreSQL server, be it for private use or for others, should read this part.
+Part IV describes the programming interfaces for PostgreSQL client programs.
+Part V contains information for advanced users about the extensibility capabilities of the server. Topics include user-defined data types and functions.
+Part VI contains reference information about SQL commands, client and server programs. This part supports the other parts with structured information sorted by command or program.
+Part VII contains assorted information that might be of use to PostgreSQL developers.
+Prev Up Next PostgreSQL 18.6 Documentation Home
+1.  What Is PostgreSQL?
+Submit correction If you see anything in the documentation that is not correct, does not match your experience with the particular feature or requires further clarification, please use this form to report a documentation issue.
+Policies | Code of Conduct | About PostgreSQL | Contact Copyright © 1996-2026 The PostgreSQL Global Development Group

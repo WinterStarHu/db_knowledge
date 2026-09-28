@@ -1,0 +1,32 @@
+# PostgreSQL: Documentation: 18: ALTER USER MAPPING
+
+PostgreSQL: Documentation: 18: ALTER USER MAPPING Home About Download Documentation Community Developers Support Donate Your account August 13, 2026: PostgreSQL 18.6, 17.11, 16.15, 15.19, 14.24 and 19 Beta 3 Released!
+Documentation → PostgreSQL 18 Supported Versions:
+Current (18) / 17 / 16 / 15 / 14 Development Versions:
+19 / devel Unsupported versions:
+13 / 12 / 11 / 10 /
+9.6
+/
+9.5
+/
+9.4
+/
+9.3
+/
+9.2
+/
+9.1
+/
+9.0
+/
+8.4
+ALTER USER MAPPING Prev Up SQL Commands Home Next ALTER USER MAPPING ALTER USER MAPPING — change the definition of a user mapping Synopsis ALTER USER MAPPING FOR { user_name | USER | CURRENT_ROLE | CURRENT_USER | SESSION_USER | PUBLIC } SERVER server_name OPTIONS ( [ ADD | SET | DROP ] option ['value'] [, ... ] ) Description ALTER USER MAPPING changes the definition of a user mapping.
+The owner of a foreign server can alter user mappings for that server for any user. Also, a user can alter a user mapping for their own user name if USAGE privilege on the server has been granted to the user.
+Parameters user_name User name of the mapping. CURRENT_ROLE, CURRENT_USER, and USER match the name of the current user. PUBLIC is used to match all present and future user names in the system.
+server_name Server name of the user mapping.
+OPTIONS ( [ ADD | SET | DROP ] option ['value'] [, ... ] ) Change options for the user mapping. The new options override any previously specified options. ADD, SET, and DROP specify the action to be performed. ADD is assumed if no operation is explicitly specified. Option names must be unique; options are also validated by the server's foreign-data wrapper.
+Examples Change the password for user mapping bob, server foo:
+ALTER USER MAPPING FOR bob SERVER foo OPTIONS (SET password 'public');
+Compatibility ALTER USER MAPPING conforms to ISO/IEC 9075-9 (SQL/MED). There is a subtle syntax issue: The standard omits the FOR key word. Since both CREATE USER MAPPING and DROP USER MAPPING use FOR in analogous positions, and IBM DB2 (being the other major SQL/MED implementation) also requires it for ALTER USER MAPPING, PostgreSQL diverges from the standard here in the interest of consistency and interoperability.
+See AlsoCREATE USER MAPPING, DROP USER MAPPING Prev Up Next ALTER USER Home ALTER VIEW Submit correction If you see anything in the documentation that is not correct, does not match your experience with the particular feature or requires further clarification, please use this form to report a documentation issue.
+Policies | Code of Conduct | About PostgreSQL | Contact Copyright © 1996-2026 The PostgreSQL Global Development Group

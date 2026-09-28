@@ -1,0 +1,12 @@
+# PostgreSQL: Documentation: 18: N.2. Configuring the Colors
+
+PostgreSQL: Documentation: 18: N.2. Configuring the Colors Home About Download Documentation Community Developers Support Donate Your account August 13, 2026: PostgreSQL 18.6, 17.11, 16.15, 15.19, 14.24 and 19 Beta 3 Released!
+Documentation → PostgreSQL 18 Supported Versions:
+Current (18) / 17 / 16 / 15 / 14 Development Versions:
+19 / devel Unsupported versions:
+13 N.2. Configuring the Colors Prev Up Appendix N. Color Support Home Next N.2. Configuring the Colors # The actual colors to be used are configured using the environment variable PG_COLORS (note plural). The value is a colon-separated list of key=value pairs. The keys specify what the color is to be used for. The values are SGR (Select Graphic Rendition) specifications, which are interpreted by the terminal.
+The following keys are currently in use:
+error used to highlight the text “error” in error messages warning used to highlight the text “warning” in warning messages note used to highlight the text “detail” and “hint” in such messages locus used to highlight location information (e.g., program name and file name) in messages The default value is error=01;31:warning=01;35:note=01;36:locus=01 (01;31 = bold red, 01;35 = bold magenta, 01;36 = bold cyan, 01 = bold default color).
+Tip This color specification format is also used by other software packages such as GCC, GNU coreutils, and GNU grep.
+Prev Up Next N.1. When Color is Used Home Appendix O. Obsolete or Renamed Features Submit correction If you see anything in the documentation that is not correct, does not match your experience with the particular feature or requires further clarification, please use this form to report a documentation issue.
+Policies | Code of Conduct | About PostgreSQL | Contact Copyright © 1996-2026 The PostgreSQL Global Development Group

@@ -1,0 +1,45 @@
+# PostgreSQL: Documentation: 18: F.8. btree_gist — GiST operator classes with B-tree behavior
+
+PostgreSQL: Documentation: 18: F.8. btree_gist — GiST operator classes with B-tree behavior Home About Download Documentation Community Developers Support Donate Your account August 13, 2026: PostgreSQL 18.6, 17.11, 16.15, 15.19, 14.24 and 19 Beta 3 Released!
+Documentation → PostgreSQL 18 Supported Versions:
+Current (18) / 17 / 16 / 15 / 14 Development Versions:
+19 / devel Unsupported versions:
+13 / 12 / 11 / 10 /
+9.6
+/
+9.5
+/
+9.4
+/
+9.3
+/
+9.2
+/
+9.1
+/
+9.0
+/
+8.4
+/
+8.3
+F.8. btree_gist — GiST operator classes with B-tree behavior Prev Up Appendix F. Additional Supplied Modules and Extensions Home Next F.8. btree_gist — GiST operator classes with B-tree behavior # F.8.1. Example Usage F.8.2. Authors btree_gist provides GiST index operator classes that implement B-tree equivalent behavior for the data types int2, int4, int8, float4, float8, numeric, timestamp with time zone, timestamp without time zone, time with time zone, time without time zone, date, interval, oid, money, char, varchar, text, bytea, bit, varbit, macaddr, macaddr8, inet, cidr, uuid, bool and all enum types.
+In general, these operator classes will not outperform the equivalent standard B-tree index methods, and they lack one major feature of the standard B-tree code: the ability to enforce uniqueness. However, they provide some other features that are not available with a B-tree index, as described below. Also, these operator classes are useful when a multicolumn GiST index is needed, wherein some of the columns are of data types that are only indexable with GiST but other columns are just simple data types. Lastly, these operator classes are useful for GiST testing and as a base for developing other GiST operator classes.
+In addition to the typical B-tree search operators, btree_gist also provides index support for <> (“not equals”). This may be useful in combination with an exclusion constraint, as described below.
+Also, for data types for which there is a natural distance metric, btree_gist defines a distance operator , and provides GiST index support for nearest-neighbor searches using this operator. Distance operators are provided for int2, int4, int8, float4, float8, timestamp with time zone, timestamp without time zone, time without time zone, date, interval, oid, and money.
+By default btree_gist builds GiST index with sortsupport in sorted mode. This usually results in much faster index built speed. It is still possible to revert to buffered built strategy by using the buffering parameter when creating the index.
+This module is considered “trusted”, that is, it can be installed by non-superusers who have CREATE privilege on the current database.
+F.8.1. Example Usage # Simple example using btree_gist instead of btree:
+CREATE TABLE test (a int4);
+-- create index CREATE INDEX testidx ON test USING GIST (a);
+-- query SELECT * FROM test WHERE a < 10;
+-- nearest-neighbor search: find the ten entries closest to "42" SELECT *, a  42 AS dist FROM test ORDER BY a  42 LIMIT 10;
+Use an exclusion constraint to enforce the rule that a cage at a zoo can contain only one kind of animal:
+=> CREATE TABLE zoo ( cage   INTEGER, animal TEXT, EXCLUDE USING GIST (cage WITH =, animal WITH <>) );
+=> INSERT INTO zoo VALUES(123, 'zebra');
+INSERT 0 1 => INSERT INTO zoo VALUES(123, 'zebra');
+INSERT 0 1 => INSERT INTO zoo VALUES(123, 'lion');
+ERROR:  conflicting key value violates exclusion constraint "zoo_cage_animal_excl" DETAIL:  Key (cage, animal)=(123, lion) conflicts with existing key (cage, animal)=(123, zebra).
+=> INSERT INTO zoo VALUES(124, 'lion');
+INSERT 0 1 F.8.2. Authors # Teodor Sigaev (), Oleg Bartunov (), Janko Richter (), and Paul Jungwirth (). See http://www.sai.msu.su/~megera/postgres/gist/ for additional information.
+Prev Up Next F.7. btree_gin — GIN operator classes with B-tree behavior Home F.9. citext — a case-insensitive character string type Submit correction If you see anything in the documentation that is not correct, does not match your experience with the particular feature or requires further clarification, please use this form to report a documentation issue.
+Policies | Code of Conduct | About PostgreSQL | Contact Copyright © 1996-2026 The PostgreSQL Global Development Group

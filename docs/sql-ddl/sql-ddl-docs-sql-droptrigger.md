@@ -1,0 +1,49 @@
+# PostgreSQL: Documentation: 18: DROP TRIGGER
+
+PostgreSQL: Documentation: 18: DROP TRIGGER Home About Download Documentation Community Developers Support Donate Your account August 13, 2026: PostgreSQL 18.6, 17.11, 16.15, 15.19, 14.24 and 19 Beta 3 Released!
+Documentation → PostgreSQL 18 Supported Versions:
+Current (18) / 17 / 16 / 15 / 14 Development Versions:
+19 / devel Unsupported versions:
+13 / 12 / 11 / 10 /
+9.6
+/
+9.5
+/
+9.4
+/
+9.3
+/
+9.2
+/
+9.1
+/
+9.0
+/
+8.4
+/
+8.3
+/
+8.2
+/
+8.1
+/
+8.0
+/
+7.4
+/
+7.3
+/
+7.2
+/
+7.1
+DROP TRIGGER Prev Up SQL Commands Home Next DROP TRIGGER DROP TRIGGER — remove a trigger Synopsis DROP TRIGGER [ IF EXISTS ] name ON table_name [ CASCADE | RESTRICT ] Description DROP TRIGGER removes an existing trigger definition. To execute this command, the current user must be the owner of the table for which the trigger is defined.
+Parameters IF EXISTS Do not throw an error if the trigger does not exist. A notice is issued in this case.
+name The name of the trigger to remove.
+table_name The name (optionally schema-qualified) of the table for which the trigger is defined.
+CASCADE Automatically drop objects that depend on the trigger, and in turn all objects that depend on those objects (see Section 5.15).
+RESTRICT Refuse to drop the trigger if any objects depend on it. This is the default.
+Examples Destroy the trigger if_dist_exists on the table films:
+DROP TRIGGER if_dist_exists ON films;
+Compatibility The DROP TRIGGER statement in PostgreSQL is incompatible with the SQL standard. In the SQL standard, trigger names are not local to tables, so the command is simply DROP TRIGGER name.
+See AlsoCREATE TRIGGER Prev Up Next DROP TRANSFORM Home DROP TYPE Submit correction If you see anything in the documentation that is not correct, does not match your experience with the particular feature or requires further clarification, please use this form to report a documentation issue.
+Policies | Code of Conduct | About PostgreSQL | Contact Copyright © 1996-2026 The PostgreSQL Global Development Group

@@ -1,0 +1,49 @@
+# PostgreSQL: Documentation: 18: 52.30. pg_largeobject
+
+PostgreSQL: Documentation: 18: 52.30. pg_largeobject Home About Download Documentation Community Developers Support Donate Your account August 13, 2026: PostgreSQL 18.6, 17.11, 16.15, 15.19, 14.24 and 19 Beta 3 Released!
+Documentation → PostgreSQL 18 Supported Versions:
+Current (18) / 17 / 16 / 15 / 14 Development Versions:
+19 / devel Unsupported versions:
+13 / 12 / 11 / 10 /
+9.6
+/
+9.5
+/
+9.4
+/
+9.3
+/
+9.2
+/
+9.1
+/
+9.0
+/
+8.4
+/
+8.3
+/
+8.2
+/
+8.1
+/
+8.0
+/
+7.4
+/
+7.3
+/
+7.2
+52.30. pg_largeobject
+Prev Up Chapter 52. System Catalogs Home Next
+52.30. pg_largeobject #
+The catalog pg_largeobject holds the data making up “large objects”. A large object is identified by an OID assigned when it is created. Each large object is broken into segments or “pages” small enough to be conveniently stored as rows in pg_largeobject. The amount of data per page is defined to be LOBLKSIZE (which is currently BLCKSZ/4, or typically 2 kB).
+Prior to PostgreSQL 9.0, there was no permission structure associated with large objects. As a result, pg_largeobject was publicly readable and could be used to obtain the OIDs (and contents) of all large objects in the system. This is no longer the case; use pg_largeobject_metadata to obtain a list of large object OIDs.
+Table 52.30. pg_largeobject Columns Column Type Description loid oid (references pg_largeobject_metadata.oid) Identifier of the large object that includes this page pageno int4 Page number of this page within its large object (counting from zero) data bytea Actual data stored in the large object. This will never be more than LOBLKSIZE bytes and might be less.
+Each row of pg_largeobject holds data for one page of a large object, beginning at byte offset (pageno * LOBLKSIZE) within the object. The implementation allows sparse storage: pages might be missing, and might be shorter than LOBLKSIZE bytes even if they are not the last page of the object. Missing regions within a large object read as zeroes.
+Prev Up Next
+52.29. pg_language
+Home
+52.31. pg_largeobject_metadata
+Submit correction If you see anything in the documentation that is not correct, does not match your experience with the particular feature or requires further clarification, please use this form to report a documentation issue.
+Policies | Code of Conduct | About PostgreSQL | Contact Copyright © 1996-2026 The PostgreSQL Global Development Group

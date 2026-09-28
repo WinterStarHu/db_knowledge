@@ -1,0 +1,48 @@
+# PostgreSQL: Documentation: 18: DROP TYPE
+
+PostgreSQL: Documentation: 18: DROP TYPE Home About Download Documentation Community Developers Support Donate Your account August 13, 2026: PostgreSQL 18.6, 17.11, 16.15, 15.19, 14.24 and 19 Beta 3 Released!
+Documentation → PostgreSQL 18 Supported Versions:
+Current (18) / 17 / 16 / 15 / 14 Development Versions:
+19 / devel Unsupported versions:
+13 / 12 / 11 / 10 /
+9.6
+/
+9.5
+/
+9.4
+/
+9.3
+/
+9.2
+/
+9.1
+/
+9.0
+/
+8.4
+/
+8.3
+/
+8.2
+/
+8.1
+/
+8.0
+/
+7.4
+/
+7.3
+/
+7.2
+/
+7.1
+DROP TYPE Prev Up SQL Commands Home Next DROP TYPE DROP TYPE — remove a data type Synopsis DROP TYPE [ IF EXISTS ] name [, ...] [ CASCADE | RESTRICT ] Description DROP TYPE removes a user-defined data type. Only the owner of a type can remove it.
+Parameters IF EXISTS Do not throw an error if the type does not exist. A notice is issued in this case.
+name The name (optionally schema-qualified) of the data type to remove.
+CASCADE Automatically drop objects that depend on the type (such as table columns, functions, and operators), and in turn all objects that depend on those objects (see Section 5.15).
+RESTRICT Refuse to drop the type if any objects depend on it. This is the default.
+Examples To remove the data type box:
+DROP TYPE box;
+Compatibility This command is similar to the corresponding command in the SQL standard, apart from the IF EXISTS option, which is a PostgreSQL extension. But note that much of the CREATE TYPE command and the data type extension mechanisms in PostgreSQL differ from the SQL standard.
+See AlsoALTER TYPE, CREATE TYPE Prev Up Next DROP TRIGGER Home DROP USER Submit correction If you see anything in the documentation that is not correct, does not match your experience with the particular feature or requires further clarification, please use this form to report a documentation issue.
+Policies | Code of Conduct | About PostgreSQL | Contact Copyright © 1996-2026 The PostgreSQL Global Development Group

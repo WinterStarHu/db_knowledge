@@ -1,0 +1,71 @@
+# PostgreSQL: Documentation: 18: Chapter 4. SQL Syntax
+
+PostgreSQL: Documentation: 18: Chapter 4. SQL Syntax Home About Download Documentation Community Developers Support Donate Your account August 13, 2026: PostgreSQL 18.6, 17.11, 16.15, 15.19, 14.24 and 19 Beta 3 Released!
+Documentation → PostgreSQL 18 Supported Versions:
+Current (18) / 17 / 16 / 15 / 14 Development Versions:
+19 / devel Unsupported versions:
+13 / 12 / 11 / 10 /
+9.6
+/
+9.5
+/
+9.4
+/
+9.3
+/
+9.2
+/
+9.1
+/
+9.0
+/
+8.4
+/
+8.3
+/
+8.2
+/
+8.1
+/
+8.0
+/
+7.4
+/
+7.3
+/
+7.2
+/
+7.1
+Chapter 4. SQL Syntax Prev Up Part II. The SQL Language Home Next Chapter 4. SQL Syntax Table of Contents
+4.1. Lexical Structure
+4.1.1. Identifiers and Key Words
+4.1.2. Constants
+4.1.3. Operators
+4.1.4. Special Characters
+4.1.5. Comments
+4.1.6. Operator Precedence
+4.2. Value Expressions
+4.2.1. Column References
+4.2.2. Positional Parameters
+4.2.3. Subscripts
+4.2.4. Field Selection
+4.2.5. Operator Invocations
+4.2.6. Function Calls
+4.2.7. Aggregate Expressions
+4.2.8. Window Function Calls
+4.2.9. Type Casts
+4.2.10. Collation Expressions
+4.2.11. Scalar Subqueries
+4.2.12. Array Constructors
+4.2.13. Row Constructors
+4.2.14. Expression Evaluation Rules
+4.3. Calling Functions
+4.3.1. Using Positional Notation
+4.3.2. Using Named Notation
+4.3.3. Using Mixed Notation
+This chapter describes the syntax of SQL. It forms the foundation for understanding the following chapters which will go into detail about how SQL commands are applied to define and modify data.
+We also advise users who are already familiar with SQL to read this chapter carefully because it contains several rules and concepts that are implemented inconsistently among SQL databases or that are specific to PostgreSQL.
+Prev Up Next Part II. The SQL Language Home
+4.1. Lexical Structure
+Submit correction If you see anything in the documentation that is not correct, does not match your experience with the particular feature or requires further clarification, please use this form to report a documentation issue.
+Policies | Code of Conduct | About PostgreSQL | Contact Copyright © 1996-2026 The PostgreSQL Global Development Group

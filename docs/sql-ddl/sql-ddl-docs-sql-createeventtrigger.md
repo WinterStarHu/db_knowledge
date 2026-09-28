@@ -1,0 +1,31 @@
+# PostgreSQL: Documentation: 18: CREATE EVENT TRIGGER
+
+PostgreSQL: Documentation: 18: CREATE EVENT TRIGGER Home About Download Documentation Community Developers Support Donate Your account August 13, 2026: PostgreSQL 18.6, 17.11, 16.15, 15.19, 14.24 and 19 Beta 3 Released!
+Documentation → PostgreSQL 18 Supported Versions:
+Current (18) / 17 / 16 / 15 / 14 Development Versions:
+19 / devel Unsupported versions:
+13 / 12 / 11 / 10 /
+9.6
+/
+9.5
+/
+9.4
+/
+9.3
+CREATE EVENT TRIGGER Prev Up SQL Commands Home Next CREATE EVENT TRIGGER CREATE EVENT TRIGGER — define a new event trigger Synopsis CREATE EVENT TRIGGER name ON event [ WHEN filter_variable IN (filter_value [, ... ]) [ AND ... ] ] EXECUTE { FUNCTION | PROCEDURE } function_name() Description CREATE EVENT TRIGGER creates a new event trigger. Whenever the designated event occurs and the WHEN condition associated with the trigger, if any, is satisfied, the trigger function will be executed. For a general introduction to event triggers, see Chapter 38. The user who creates an event trigger becomes its owner.
+Parameters name The name to give the new trigger. This name must be unique within the database.
+event The name of the event that triggers a call to the given function. See Section 38.1 for more information on event names.
+filter_variable The name of a variable used to filter events. This makes it possible to restrict the firing of the trigger to a subset of the cases in which it is supported. Currently the only supported filter_variable is TAG.
+filter_value A list of values for the associated filter_variable for which the trigger should fire. For TAG, this means a list of command tags (e.g., 'DROP FUNCTION').
+function_name A user-supplied function that is declared as taking no argument and returning type event_trigger.
+In the syntax of CREATE EVENT TRIGGER, the keywords FUNCTION and PROCEDURE are equivalent, but the referenced function must in any case be a function, not a procedure. The use of the keyword PROCEDURE here is historical and deprecated.
+Notes Only superusers can create event triggers.
+Event triggers are disabled in single-user mode (see postgres) as well as when event_triggers is set to false. If an erroneous event trigger disables the database so much that you can't even drop the trigger, restart with event_triggers set to false to temporarily disable event triggers, or in single-user mode, and you'll be able to do that.
+Examples Forbid the execution of any DDL command:
+CREATE OR REPLACE FUNCTION abort_any_command() RETURNS event_trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'command % is disabled', tg_tag;
+END;
+$$;
+CREATE EVENT TRIGGER abort_ddl ON ddl_command_start EXECUTE FUNCTION abort_any_command();
+Compatibility There is no CREATE EVENT TRIGGER statement in the SQL standard.
+See AlsoALTER EVENT TRIGGER, DROP EVENT TRIGGER, CREATE FUNCTION Prev Up Next CREATE DOMAIN Home CREATE EXTENSION Submit correction If you see anything in the documentation that is not correct, does not match your experience with the particular feature or requires further clarification, please use this form to report a documentation issue.
+Policies | Code of Conduct | About PostgreSQL | Contact Copyright © 1996-2026 The PostgreSQL Global Development Group
