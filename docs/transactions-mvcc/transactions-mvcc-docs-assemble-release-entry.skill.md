@@ -1,0 +1,184 @@
+# Skill: assemble-release-entry
+
+Combine improvement and bug fix entries into a complete versioned RST block for an Ops Manager patch release.
+
+version: string                # Ops Manager patch version (e.g., "8.0.25") release_date: string           # YYYY-MM-DD (e.g., "2026-07-15") improvement_entries:           # Array of RST entry strings from write-improvement-entry skill
+  - string
+bug_entries:                   # Array of RST entry strings from write-bug-entry skill (may be empty)
+  - string
+
+rst: string  # Complete RST section ready to prepend to the changelog
+
+## Step 1: Create the Anchor
+
+Format: `.. _opsmgr-server-{version}:`
+
+Example: `.. _opsmgr-server-8.0.25:`
+
+## Step 2: Create the Title
+
+Format: `|onprem| Server {version}` Underline with tildes (`~`) matching the title length exactly.
+
+`|onprem|` is a `|pipe|` substitution, so count the **raw RST source text**. Do not expand `|onprem|` to "Ops Manager" when counting. See the "Headings" section of `.claude/rules/rst-conventions.md` for the full rule.
+
+Example for version `8.0.25`:
+- Source title: `|onprem| Server 8.0.25` (22 chars)
+- Underline: 22 tildes
+
+```rst
+|onprem| Server 8.0.25
+~~~~~~~~~~~~~~~~~~~~~~
+```
+
+## Step 3: Add Release Date Line
+
+One blank line after the underline, then:
+
+```rst
+*Released {YYYY-MM-DD}*
+```
+
+## Step 4: Add Improvements Section
+
+Heading:
+
+```rst
+Improvements
+~~~~~~~~~~~~
+```
+
+Then list all improvement entries, each separated by a blank line.
+
+The final two entries in Improvements are always synthesized by the orchestrator and passed as the last two items in `improvement_entries`:
+
+1. **Second-to-last**: MongoDB Agent version line
+   ```rst
+   - Updates the {+mdbagent+} to
+     :ref:`{agent_version} `.
+   ```
+
+2. **Last**: Database tools line
+   ```rst
+   - Supports :dbtools:`MongoDB Database Tools {db_tools_version}
+   ```
+
+Do not reorder the entries passed in.
+
+## Step 5: Add Bug Fixes Section (conditional)
+
+If `bug_entries` is non-empty, add:
+
+```rst
+Bug Fixes
+~~~~~~~~~
+```
+
+Then list all bug entries, each separated by a blank line.
+
+If `bug_entries` is empty, **omit the Bug Fixes section entirely**.
+
+## Step 6: Final Formatting
+
+- All lines wrapped at 72 characters
+- Continuation lines indented 2 spaces
+- Blank line between each bullet entry
+- Two blank lines after the last entry before the end of the block
+
+- Agent version line is always second-to-last in Improvements
+- Database tools line is always last in Improvements
+- Bug Fixes section is omitted entirely when bug_entries is empty
+- NO Jira keys in output
+- All lines at most 72 characters
+- Use `|onprem|` for "Ops Manager" and `{+mdbagent+}` for "MongoDB Agent"
+
+Input:
+```yaml
+version: "8.0.25"
+release_date: "2026-07-15"
+improvement_entries:
+  - |
+    - Adds support for MongoDB on RHEL 9 (``ppc64le``) in the
+      |onprem| UI.
+  - |
+    - Adds OAuth 2.0 client credentials authentication for webhook
+      alert notifications.
+  - |
+    - Updates the {+mdbagent+} to
+      :ref:`108.0.25.9030-1 `.
+  - |
+    - Supports :dbtools:`MongoDB Database Tools 100.18.0
+bug_entries:
+  - |
+    - Fixes an issue where |onprem| could return an internal server
+      error (HTTP 500) for a backup rollback request on a cluster
+      with no active backup status.
+```
+
+Output:
+```yaml
+rst: |
+  .. _opsmgr-server-8.0.25:
+
+  |onprem| Server 8.0.25
+  ~~~~~~~~~~~~~~~~~~~~~~
+
+  *Released 2026-07-15*
+
+  Improvements
+  ~~~~~~~~~~~~
+
+  - Adds support for MongoDB on RHEL 9 (``ppc64le``) in the
+    |onprem| UI.
+
+  - Adds OAuth 2.0 client credentials authentication for webhook
+    alert notifications.
+
+  - Updates the {+mdbagent+} to
+    :ref:`108.0.25.9030-1 `.
+
+  - Supports :dbtools:`MongoDB Database Tools 100.18.0
+
+  Bug Fixes
+  ~~~~~~~~~
+
+  - Fixes an issue where |onprem| could return an internal server
+    error (HTTP 500) for a backup rollback request on a cluster
+    with no active backup status.
+
+```
+
+Input:
+```yaml
+version: "8.0.26"
+release_date: "2026-08-12"
+improvement_entries:
+  - "- Adds support for new backup storage backend."
+  - |
+    - Updates the {+mdbagent+} to
+      :ref:`108.0.26.9045-1 `.
+  - |
+    - Supports :dbtools:`MongoDB Database Tools 100.18.1
+bug_entries: []
+```
+
+Output:
+```yaml
+rst: |
+  .. _opsmgr-server-8.0.26:
+
+  |onprem| Server 8.0.26
+  ~~~~~~~~~~~~~~~~~~~~~~
+
+  *Released 2026-08-12*
+
+  Improvements
+  ~~~~~~~~~~~~
+
+  - Adds support for new backup storage backend.
+
+  - Updates the {+mdbagent+} to
+    :ref:`108.0.26.9045-1 `.
+
+  - Supports :dbtools:`MongoDB Database Tools 100.18.1
+
+```
