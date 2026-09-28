@@ -1,0 +1,45 @@
+---
+slug: /sql-reference/statements/create/dictionary/layouts/hierarchical
+title: 'Hierarchical dictionaries'
+sidebarTitle: 'Hierarchical'
+description: 'Configure hierarchical dictionaries with parent-child key relationships.'
+doc_type: 'reference'
+---
+
+## Hierarchical dictionaries {#hierarchical-dictionaries}
+
+ClickHouse supports hierarchical dictionaries with a [numeric key](/reference/statements/create/dictionary/attributes#numeric-key).
+
+Look at the following hierarchical structure:
+
+```text
+0 (Common parent)
+│
+├── 1 (United States of America)
+│   │
+│   └── 2 (California)
+│       │
+│       └── 3 (San Francisco)
+│
+└── 4 (Great Britain)
+    │
+    └── 5 (London)
+```
+
+This hierarchy can be expressed as the following dictionary table.
+
+| region_id | parent_region | region_name  |
+|------------|----------------|---------------|
+| 1          | 0              | United States of America |
+| 2          | 1              | California               |
+| 3          | 2              | San Francisco            |
+| 4          | 0              | Great Britain            |
+| 5          | 4              | London                   |
+
+This table contains a column `parent_region` that contains the key of the nearest parent for the element.
+
+ClickHouse supports the hierarchical property for external dictionary attributes. This property allows you to configure the hierarchical dictionary similar to what is described above.
+
+The [dictGetHierarchy](/reference/functions/regular-functions/ext-dict-functions#dictGetHierarchy) function allows you to get the parent chain of an element. The [dictGetRoot](/reference/functions/regular-functions/ext-dict-functions#dictGetRoot) function returns just the topmost ancestor (the root) of an element.
+
+For our example, the structure of the dictionary can be the following:

@@ -1,0 +1,67 @@
+---
+sidebarTitle: 'R2DBC driver'
+keywords: ['clickhouse', 'java', 'driver', 'integrate', 'r2dbc']
+description: 'ClickHouse R2DBC driver'
+slug: /integrations/java/r2dbc
+title: 'R2DBC driver'
+doc_type: 'reference'
+integration:
+  - support_level: 'core'
+  - category: 'language_client'
+---
+
+## R2DBC driver {#r2dbc-driver}
+
+[R2DBC](https://r2dbc.io/) wrapper of async Java client for ClickHouse.
+
+### Environment requirements {#environment-requirements}
+
+- [OpenJDK](https://openjdk.java.net) version >= 8
+
+### Setup {#setup}
+
+```xml
+com.clickhouse
+clickhouse-r2dbc
+0.7.1
+all
+```
+
+### Connect to ClickHouse {#connect-to-clickhouse}
+
+```java showLineNumbers
+ConnectionFactory connectionFactory = ConnectionFactories
+    .get("r2dbc:clickhouse:http://{username}:{password}@{host}:{port}/{database}");
+
+    Mono.from(connectionFactory.create())
+        .flatMapMany(connection -> connection
+```
+
+### Query {#query}
+
+```java showLineNumbers
+connection
+    .createStatement("select domain, path,  toDate(cdate) as d, count(1) as count from clickdb.clicks where domain = :domain group by domain, path, d")
+    .bind("domain", domain)
+    .execute()
+    .flatMap(result -> result
+    .map((row, rowMetadata) -> String.format("%s%s[%s]:%d", row.get("domain", String.class),
+        row.get("path", String.class),
+        row.get("d", LocalDate.class),
+        row.get("count", Long.class)))
+    )
+    .doOnNext(System.out::println)
+    .subscribe();
+```
+
+### Insert {#insert}
+
+```java showLineNumbers
+connection
+    .createStatement("insert into clickdb.clicks values (:domain, :path, :cdate, :count)")
+    .bind("domain", click.getDomain())
+    .bind("path", click.getPath())
+    .bind("cdate", LocalDateTime.now())
+    .bind("count", 1)
+    .execute();
+```
