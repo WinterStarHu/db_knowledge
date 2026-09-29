@@ -1,0 +1,279 @@
+# 数据库内核月报
+
+> 来源: http://mysql.taobao.org/monthly/2014/08/06/
+> 分类: 分支特性
+
+数据库内核月报
+ -->
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+ -->
+  
+hljs.initHighlightingOnLoad();
+
+  
+
+  
+
+  
+
+  
+
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-62056244-1', 'auto');
+  ga('send', 'pageview');
+
+ -->
+
+  
+
+  
+
+  数据库内核月报
+	
+
+  
+
+    
+数据库内核月报 － 2014 / 08
+
+  
+
+  
+
+    
+
+      
+
+        
+
+          
+当期文章
+
+          
+
+                    
+
+                  
+                      
+
+                        MySQL · 参数故事 · timed_mutexes
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        MySQL · 参数故事 · innodb_flush_log_at_trx_commit
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        MySQL · 捉虫动态 · Count(Distinct) ERROR
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        MySQL · 捉虫动态 · mysqldump BUFFER OVERFLOW
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        MySQL · 捉虫动态 · long semaphore waits
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        MariaDB · 分支特性 · 支持大于16K的InnoDB Page Size
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        MariaDB · 分支特性 · FusionIO特性支持
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        TokuDB · 性能优化 · Bulk Fetch
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        TokuDB · 数据结构 · Fractal-Trees与LSM-Trees对比
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        TokuDB·社区八卦·TokuDB团队
+                      
+
+                    
+
+ 
+        
+
+    
+
+  
+
+    
+ MariaDB · 分支特性 · 支持大于16K的InnoDB Page Size  
+
+    
+ Author:   
+
+  
+
+  
+
+  
+背景
+
+最近发布的MariaDB 10.1 Alpha版本，提交了一个改动，放宽了InnoDB Page<=16K的限制，将上限提高到64K。 从MDEV-6075需求文档中可以看出，目前只支持COMPACT的结构，DYNAMIC结构能否支持还在研究，COMPRESSED结构则确定无法支持。
+
+revno: 3987
+committer: Jan Lindström &lt;jplindst@mariadb.org&gt;
+branch nick: 10.1
+timestamp: Tue 2014-05-13 13:28:57 +0300
+message:
+MDEV-6075: Allow &gt; 16K pages on InnoDB
+This patch allows up to 64K pages for tables with DYNAMIC, COMPACT and REDUNDANT row types. Tables with COMPRESSED row type allows still only &lt;= 16K page size. Note that single row size must be still &lt;= 16K and max key length is not affected.
+
+业务应用
+
+什么情况下需要64K这么大的页面呢？ 我们知道一个Page，不是所有的page_size都可以用来存数据，还有一些管理信息要存，例如页头和页尾（
+InnoDB Page
+）。 此外，InnoDB Buffer Pool管理页面本身也有代价，Page数越多，那么相同大小下，管理链表就越长。
+
+因此当我们的数据行本身就比较长，尤其是做大块插入的时候，更大的页面更有利于提升如速度，因为一个页面可以放入更多的行，每个IO写下去的大小更大，就可以以更少的IOPS写更多的数据。 而且，当行长超过8K的时候，如果是16K的页面，就会强制转换一些字符串类型为TEXT，把字符串主体转移到扩展页中，会导致读取列需要多一个IO，更大的页面也就支持了更大的行长，64K页面可以支持近似32K的行长而不用使用扩展页。 但是，如果是短小行长的随机读取和写入，则不适合使用这么大的页面，这会导致IO效率下降，大IO只能读取到小部分有效数据，得不偿失。
+
+  
+
+    
+
+		
+
+ -->
+  
+
+  
+阿里云PolarDB-数据库内核组
+ -->
+  
+ -->
+  
+社招/校招 欢迎投递简历 直达招聘信息
+ -->
+  
+ -->
+  
+直连月报小编
+ -->
+  
+ -->
+  
+欢迎在github上star AliSQL
+ -->
+  
+
+  阅读：
+ - 
+
+  
+
+本作品采用
+知识共享署名-非商业性使用-相同方式共享 3.0 未本地化版本许可协议
+进行许可。
+
+  jQuery(document).ready(function($){
+    // browser window scroll (in pixels) after which the "back to top" link is shown
+    var offset = 300,
+      //browser window scroll (in pixels) after which the "back to top" link opacity is reduced
+      offset_opacity = 1200,
+      //duration of the top scrolling animation (in ms)
+      scroll_top_duration = 700,
+      //grab the "back to top" link
+      $back_to_top = $('.cd-top');
+
+    //hide or show the "back to top" link
+    $(window).scroll(function(){
+      ( $(this).scrollTop() > offset ) ? $back_to_top.addClass('cd-is-visible') : $back_to_top.removeClass('cd-is-visible cd-fade-out');
+      if( $(this).scrollTop() > offset_opacity ) {
+        $back_to_top.addClass('cd-fade-out');
+      }
+    });
+
+    //smooth scroll to top
+    $back_to_top.on('click', function(event){
+      event.preventDefault();
+      $('body,html').animate({
+        scrollTop: 0 ,
+        }, scroll_top_duration
+      );
+    });
+
+  });

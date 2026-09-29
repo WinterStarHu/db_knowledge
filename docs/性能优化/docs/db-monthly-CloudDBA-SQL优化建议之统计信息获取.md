@@ -1,0 +1,352 @@
+# 数据库内核月报
+
+> 来源: http://mysql.taobao.org/monthly/2017/10/02/
+> 分类: 性能优化
+
+数据库内核月报
+ -->
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+ -->
+  
+hljs.initHighlightingOnLoad();
+
+  
+
+  
+
+  
+
+  
+
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-62056244-1', 'auto');
+  ga('send', 'pageview');
+
+ -->
+
+  
+
+  
+
+  数据库内核月报
+	
+
+  
+
+    
+数据库内核月报 － 2017 / 10
+
+  
+
+  
+
+    
+
+      
+
+        
+
+          
+当期文章
+
+          
+
+                    
+
+                  
+                      
+
+                        PgSQL · 特性分析 · MVCC机制浅析
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        MySQL · 性能优化· CloudDBA SQL优化建议之统计信息获取
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        MySQL · 引擎特性 · InnoDB mini transation
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        MySQL · 特性介绍 · 一些流行引擎存储格式简介
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        MSSQL · 架构分析 · 从SQL Server 2017发布看SQL Server架构的演变
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        MySQL · 引擎介绍 · Sphinx源码剖析(三)
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        PgSQL · 内核开发 · 如何管理你的 PostgreSQL 插件
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        MySQL · 特性分析 · 数据一样checksum不一样
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        PgSQL · 应用案例 · 经营、销售分析系统DB设计之共享充电宝
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        MySQL · 捉虫动态 · 信号处理机制分析
+                      
+
+                    
+
+ 
+        
+
+    
+
+  
+
+    
+ MySQL · 性能优化· CloudDBA SQL优化建议之统计信息获取  
+
+    
+ Author: 西扬  
+
+  
+
+  
+
+  
+阿里云CloudDBA具有SQL优化建议功能，包括SQL重写建议和索引建议。SQL索引建议是帮助数据库优化器创造最佳执行路径，需要遵循数据库优化器的一系列规则来实现。CloudDBA需要首先计算表统计信息，是因为：
+
+  
+数据库优化器通常是基于代价寻找执行路径；
+
+  
+SQL优化建议所针对的数据库不限于MySQL数据库，也不局限于某一个特定版本；
+
+1. 基本原则
+
+数据库统计信息在SQL优化起到重要作用。用来估算查询条件选择度的常见统计信息包括表统计信息和字段统计信息。DBA计算查询条件选择度或代价时经常通过手工执行SQL语句获取，并进行返回行数或代价的粗略估算。
+
+  
+表统计信息：表中总记录数；
+
+  
+字段统计信息：包括最大值，最小值；以及不同值个数；
+
+而要相对更准确的获取条件选择度的估算，往往需要统计直方图(Histogram)，因为多数情况，每个值的出现频度是不一样的。针对复杂SQL的优化，比如多条件查询、Range查询以及多表关联查询等，统计直方图能帮助DBA更好的进行代价估算。
+
+在云上环境，获取统计信息以最小代价为前提的，不能对生产系统造成任何性能上的负面影响，也不能耗费较长时间。获取统计数据的基本原则如下：
+
+  
+从备库获取统计数据；
+
+  
+只统计最近数据；
+
+  
+采取抽样的方式获取数据；
+
+  
+不抽取原始数据，只对数据的hash值进行统计；
+
+2. 最近数据统计
+
+长期变化的数据通常具有周期性，并且以天为基本周期符合一般业务逻辑。因此多数情况无需对全量数据进行统计，抽取最近一天的数据通常具有代表性。
+
+3. 样例数据统计
+
+云上数据库通常要求表设计中有自增主键。在这一条件下获取表的最近数据的方法较为简单，比如：
+
+	select * from tab order by id desc limit 1000;
+
+该语句通过在自增主键上做排序并获取最近插入的1000行数据。由于id是主键，排序并无额外代价。类似方式可以获取第其它样例数据，比如：
+
+	select * from tab order by id desc limit 10000, 1000;
+
+4. 数据特征分析
+
+基于抽样数据，对影响选择度或查询返回行数的特性进行分析：
+
+  
+
+    
+数据频率
+
+    
+对每一份样例数据中不同字段的频率统计之后，需要推导出或预测字段中的某个数值在全表中的频率情况。通过分析不同样例数据间的数据重合度在具体实践中具有实际意义。
+
+  
+
+  
+
+    
+数据密度
+
+    
+获取每个字段的最大值和最小值代价较高。变通方法就是通过样例数据的最大最小值以及频率进行数据密度计算。基于数据密度数据，估算范围查询返回行数。
+
+  
+
+  
+
+    
+字段关联性
+
+    
+评估多条件查询的选择度需要首先获取字段之间的关联性。若多条件查询条件关联性很低，则综合选择度就是单个条件选择度的乘积；若多条件查询条件关联性较高，则采用最小选择度（或乘以系数）作为综合选择度。
+
+  
+
+5. 总结
+
+  
+直方图是对基本数据的估计，任何直方图都不是精确的；
+
+  
+云上环境以最小代价获取统计数据是基本前提；
+
+  
+数据库优化器需要选择的是最佳路径，得出字段之间选择度的相对值更为重要；
+
+  
+
+    
+
+		
+
+ -->
+  
+
+  
+阿里云PolarDB-数据库内核组
+ -->
+  
+ -->
+  
+社招/校招 欢迎投递简历 直达招聘信息
+ -->
+  
+ -->
+  
+直连月报小编
+ -->
+  
+ -->
+  
+欢迎在github上star AliSQL
+ -->
+  
+
+  阅读：
+ - 
+
+  
+
+本作品采用
+知识共享署名-非商业性使用-相同方式共享 3.0 未本地化版本许可协议
+进行许可。
+
+  jQuery(document).ready(function($){
+    // browser window scroll (in pixels) after which the "back to top" link is shown
+    var offset = 300,
+      //browser window scroll (in pixels) after which the "back to top" link opacity is reduced
+      offset_opacity = 1200,
+      //duration of the top scrolling animation (in ms)
+      scroll_top_duration = 700,
+      //grab the "back to top" link
+      $back_to_top = $('.cd-top');
+
+    //hide or show the "back to top" link
+    $(window).scroll(function(){
+      ( $(this).scrollTop() > offset ) ? $back_to_top.addClass('cd-is-visible') : $back_to_top.removeClass('cd-is-visible cd-fade-out');
+      if( $(this).scrollTop() > offset_opacity ) {
+        $back_to_top.addClass('cd-fade-out');
+      }
+    });
+
+    //smooth scroll to top
+    $back_to_top.on('click', function(event){
+      event.preventDefault();
+      $('body,html').animate({
+        scrollTop: 0 ,
+        }, scroll_top_duration
+      );
+    });
+
+  });

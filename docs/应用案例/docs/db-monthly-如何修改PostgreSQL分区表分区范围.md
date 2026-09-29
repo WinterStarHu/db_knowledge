@@ -1,0 +1,479 @@
+# 数据库内核月报
+
+> 来源: http://mysql.taobao.org/monthly/2019/06/09/
+> 分类: 应用案例
+
+数据库内核月报
+ -->
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+ -->
+  
+hljs.initHighlightingOnLoad();
+
+  
+
+  
+
+  
+
+  
+
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-62056244-1', 'auto');
+  ga('send', 'pageview');
+
+ -->
+
+  
+
+  
+
+  数据库内核月报
+	
+
+  
+
+    
+数据库内核月报 － 2019 / 06
+
+  
+
+  
+
+    
+
+      
+
+        
+
+          
+当期文章
+
+          
+
+                    
+
+                  
+                      
+
+                        MySQL · 引擎特性 · 安全及权限改进相关
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        MySQL · 最佳实践 · RDS MySQL 8.0 语句级并发控制
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        CloudDBA · 最佳实践 · Performance Insights
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        PgSQL · 应用案例 · 学生为什么应该学PG
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        MongoDB · 引擎特性 · 4.2 新特性解读
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        PgSQL · 答疑解惑 · 垃圾回收、膨胀、多版本管理、存储引擎
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        MySQL · 引擎特性 · 说说InnoDB Log System的隐藏参数
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        MySQL · 引擎特性 · CHECK CONSTRAINT
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        PgSQL · 应用案例 · 如何修改PostgreSQL分区表分区范围
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        PgSQL · 应用案例 · 什么情况下可能表膨胀
+                      
+
+                    
+
+ 
+        
+
+    
+
+  
+
+    
+ PgSQL · 应用案例 · 如何修改PostgreSQL分区表分区范围  
+
+    
+ Author: digoal  
+
+  
+
+  
+
+  
+背景
+
+已有分区表，修改分区的范围。
+
+例如拆分分区，合并分区。
+
+语法如下，PG支持非常灵活的分区布局，看本文提到的HASH分区拆分，支持任意层级的分区，支持每个分区的层级深度不一样。特别适合某些数据分布不均匀的情况。例如id=1落在同一个分区但是数据量非常庞大，可以对这个分区再进行二级分区（使用其他分区方法，其他字段都可以，非常灵活）。
+
+ALTER TABLE [ IF EXISTS ] name  
+    ATTACH PARTITION partition_name { FOR VALUES partition_bound_spec | DEFAULT }  
+ALTER TABLE [ IF EXISTS ] name  
+    DETACH PARTITION partition_name  
+  
+and partition_bound_spec is:  
+  
+IN ( partition_bound_expr [, ...] ) |  
+FROM ( { partition_bound_expr | MINVALUE | MAXVALUE } [, ...] )  
+  TO ( { partition_bound_expr | MINVALUE | MAXVALUE } [, ...] ) |  
+WITH ( MODULUS numeric_literal, REMAINDER numeric_literal )  
+
+拆分已有分区例子(hash)
+
+1、创建一个哈希分区表，4个分区
+
+postgres=# create table t_hash (id int , info text) PARTITION BY hash (id);  
+CREATE TABLE  
+postgres=# create table t_hash0 partition of t_hash FOR VALUES with (MODULUS 4, REMAINDER 0);  
+CREATE TABLE  
+postgres=# create table t_hash1 partition of t_hash FOR VALUES with (MODULUS 4, REMAINDER 1);  
+CREATE TABLE  
+postgres=# create table t_hash2 partition of t_hash FOR VALUES with (MODULUS 4, REMAINDER 2);  
+CREATE TABLE  
+postgres=# create table t_hash3 partition of t_hash FOR VALUES with (MODULUS 4, REMAINDER 3);  
+CREATE TABLE  
+
+2、查看分区表
+
+postgres=# \d+ t_hash  
+                             Partitioned table "public.t_hash"  
+ Column |  Type   | Collation | Nullable | Default | Storage  | Stats target | Description   
+--------+---------+-----------+----------+---------+----------+--------------+-------------  
+ id     | integer |           |          |         | plain    |              |   
+ info   | text    |           |          |         | extended |              |   
+Partition key: HASH (id)  
+Partitions: t_hash0 FOR VALUES WITH (modulus 4, remainder 0),  
+            t_hash1 FOR VALUES WITH (modulus 4, remainder 1),  
+            t_hash2 FOR VALUES WITH (modulus 4, remainder 2),  
+            t_hash3 FOR VALUES WITH (modulus 4, remainder 3)  
+
+3、插入一些记录
+
+postgres=# insert into t_hash select generate_series(1,10);  
+INSERT 0 10  
+
+4、查看每一条记录属于哪个分区
+
+postgres=# select tableoid::regclass,* from t_hash;  
+ tableoid | id | info   
+----------+----+------  
+ t_hash0  |  1 |   
+ t_hash1  |  3 |   
+ t_hash1  |  5 |   
+ t_hash1  |  8 |   
+ t_hash1  |  9 |   
+ t_hash2  |  2 |   
+ t_hash3  |  4 |   
+ t_hash3  |  6 |   
+ t_hash3  |  7 |   
+ t_hash3  | 10 |   
+(10 rows)  
+
+5、将1号分区拆分为2个分区。按8取模，把1号分区拆分成一个分区表（即1号分区被一个耳机分区表代替。而其他分区是直接的分区表，所以看起来就像一颗非平衡树）
+
+4(0) , 4(1) , 4(2) , 4(3)  
+  
+拆分为  
+  
+4(0) , 4(1){8(1) , 8(5)} , 4(2) , 4(3)  
+
+解绑分区
+
+postgres=# alter table t_hash DETACH PARTITION t_hash1;  
+ALTER TABLE  
+
+创建二级分区
+
+postgres=# create table t_hash1_subp (id int, info text) PARTITION BY hash (id);;  
+CREATE TABLE  
+postgres=# create table t_hash1_subp1 partition of t_hash1_subp FOR VALUES with (MODULUS 8, REMAINDER 1);  
+CREATE TABLE  
+postgres=# create table t_hash1_subp5 partition of t_hash1_subp FOR VALUES with (MODULUS 8, REMAINDER 5);  
+CREATE TABLE  
+
+绑定二级分区到一级分区。
+
+postgres=# alter table t_hash attach partition t_hash1_subp FOR VALUES WITH ( MODULUS 4, REMAINDER 1 );  
+ALTER TABLE  
+
+将原来子分区的数据写入新的二级分区表(数据迁移)
+
+postgres=# insert into t_hash1_subp select * from t_hash1;  
+INSERT 0 4  
+
+查看记录，并列出记录所在分区名
+
+postgres=# select tableoid::regclass,* from t_hash;  
+   tableoid    | id | info   
+---------------+----+------  
+ t_hash0       |  1 |   
+ t_hash1_subp1 |  3 |   
+ t_hash1_subp5 |  5 |   
+ t_hash1_subp5 |  8 |   
+ t_hash1_subp5 |  9 |   
+ t_hash2       |  2 |   
+ t_hash3       |  4 |   
+ t_hash3       |  6 |   
+ t_hash3       |  7 |   
+ t_hash3       | 10 |   
+(10 rows)  
+
+列出非平衡的分区表
+
+postgres=# \d+ t_hash  
+                             Partitioned table "public.t_hash"  
+ Column |  Type   | Collation | Nullable | Default | Storage  | Stats target | Description   
+--------+---------+-----------+----------+---------+----------+--------------+-------------  
+ id     | integer |           |          |         | plain    |              |   
+ info   | text    |           |          |         | extended |              |   
+Partition key: HASH (id)  
+Partitions: t_hash0 FOR VALUES WITH (modulus 4, remainder 0),  
+            t_hash1_subp FOR VALUES WITH (modulus 4, remainder 1), PARTITIONED,  
+            t_hash2 FOR VALUES WITH (modulus 4, remainder 2),  
+            t_hash3 FOR VALUES WITH (modulus 4, remainder 3)  
+
+扩展阅读，甚至我们可以把其他分区改成别的分区方法，例如将t_hash2改成list分区
+
+postgres=# alter table t_hash detach partition t_hash2;
+ALTER TABLE
+
+postgres=# create table t_hash2_subp (id int, info text) partition by list (info);
+CREATE TABLE
+postgres=# create table t_hash2_supb1 partition of t_hash2_subp FOR VALUES in ('hello');
+CREATE TABLE
+postgres=# create table t_hash2_supb2 partition of t_hash2_subp FOR VALUES in ('abc','cde');
+CREATE TABLE
+postgres=# create table t_hash2_supb3 partition of t_hash2_subp DEFAULT;
+CREATE TABLE
+
+postgres=# alter table t_hash attach partition t_hash2_subp for values with (modulus 4, remainder 2);
+ALTER TABLE
+
+postgres=# \d+ t_hash
+                             Partitioned table "public.t_hash"
+ Column |  Type   | Collation | Nullable | Default | Storage  | Stats target | Description 
+--------+---------+-----------+----------+---------+----------+--------------+-------------
+ id     | integer |           |          |         | plain    |              | 
+ info   | text    |           |          |         | extended |              | 
+Partition key: HASH (id)
+Partitions: t_hash0 FOR VALUES WITH (modulus 4, remainder 0),
+            t_hash1_subp FOR VALUES WITH (modulus 4, remainder 1), PARTITIONED,
+            t_hash2_subp FOR VALUES WITH (modulus 4, remainder 2), PARTITIONED,
+            t_hash3 FOR VALUES WITH (modulus 4, remainder 3)
+
+postgres=# insert into t_hash select id,'abc' from t_hash2;
+INSERT 0 1
+postgres=# insert into t_hash select id,'def' from t_hash2;
+INSERT 0 1
+postgres=# insert into t_hash select id,'hello' from t_hash2;
+INSERT 0 1
+
+postgres=# select tableoid::regclass,* from t_hash;
+   tableoid    | id | info  
+---------------+----+-------
+ t_hash0       |  1 | 
+ t_hash1_subp1 |  3 | 
+ t_hash1_subp5 |  5 | 
+ t_hash1_subp5 |  8 | 
+ t_hash1_subp5 |  9 | 
+ t_hash2_supb2 |  2 | abc
+ t_hash2_supb1 |  2 | hello
+ t_hash2_supb3 |  2 | def
+ t_hash3       |  4 | 
+ t_hash3       |  6 | 
+ t_hash3       |  7 | 
+ t_hash3       | 10 | 
+(12 rows)
+
+拆分已有分区例子(range)
+
+与之类似，无非就是partition_bound_spec的用法不一样，略。
+
+and partition_bound_spec is:  
+  
+IN ( partition_bound_expr [, ...] ) |  
+FROM ( { partition_bound_expr | MINVALUE | MAXVALUE } [, ...] )  
+  TO ( { partition_bound_expr | MINVALUE | MAXVALUE } [, ...] ) |  
+WITH ( MODULUS numeric_literal, REMAINDER numeric_literal )  
+
+合并已有分区例子(hash)
+
+与之类似，略
+
+合并已有分区例子(range)
+
+与之类似，略
+
+小结
+
+通过attach, detach支持分区的拆分，合并。PG支持非平衡分区表，深度不一定一致。例如本文，
+
+4(0) , 4(1) , 4(2) , 4(3)  
+  
+拆分为  
+  
+4(0) , 4(1){8(1) , 8(5)} , 4(2) , 4(3)  
+
+参考
+
+https://www.postgresql.org/docs/12/sql-altertable.html
+
+  
+
+    
+
+		
+
+ -->
+  
+
+  
+阿里云PolarDB-数据库内核组
+ -->
+  
+ -->
+  
+社招/校招 欢迎投递简历 直达招聘信息
+ -->
+  
+ -->
+  
+直连月报小编
+ -->
+  
+ -->
+  
+欢迎在github上star AliSQL
+ -->
+  
+
+  阅读：
+ - 
+
+  
+
+本作品采用
+知识共享署名-非商业性使用-相同方式共享 3.0 未本地化版本许可协议
+进行许可。
+
+  jQuery(document).ready(function($){
+    // browser window scroll (in pixels) after which the "back to top" link is shown
+    var offset = 300,
+      //browser window scroll (in pixels) after which the "back to top" link opacity is reduced
+      offset_opacity = 1200,
+      //duration of the top scrolling animation (in ms)
+      scroll_top_duration = 700,
+      //grab the "back to top" link
+      $back_to_top = $('.cd-top');
+
+    //hide or show the "back to top" link
+    $(window).scroll(function(){
+      ( $(this).scrollTop() > offset ) ? $back_to_top.addClass('cd-is-visible') : $back_to_top.removeClass('cd-is-visible cd-fade-out');
+      if( $(this).scrollTop() > offset_opacity ) {
+        $back_to_top.addClass('cd-fade-out');
+      }
+    });
+
+    //smooth scroll to top
+    $back_to_top.on('click', function(event){
+      event.preventDefault();
+      $('body,html').animate({
+        scrollTop: 0 ,
+        }, scroll_top_duration
+      );
+    });
+
+  });

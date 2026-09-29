@@ -1,0 +1,661 @@
+# 数据库内核月报
+
+> 来源: http://mysql.taobao.org/monthly/2015/06/06/
+> 分类: 功能分析
+
+数据库内核月报
+ -->
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+ -->
+  
+hljs.initHighlightingOnLoad();
+
+  
+
+  
+
+  
+
+  
+
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-62056244-1', 'auto');
+  ga('send', 'pageview');
+
+ -->
+
+  
+
+  
+
+  数据库内核月报
+	
+
+  
+
+    
+数据库内核月报 － 2015 / 06
+
+  
+
+  
+
+    
+
+      
+
+        
+
+          
+当期文章
+
+          
+
+                    
+
+                  
+                      
+
+                        MySQL · 引擎特性 · InnoDB 崩溃恢复过程
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        MySQL · 捉虫动态 · 唯一键约束失效
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        MySQL · 捉虫动态 · ALTER IGNORE TABLE导致主备不一致
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        MySQL · 答疑解惑 · MySQL Sort 分页
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        MySQL · 答疑解惑 · binlog event 中的 error code
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        PgSQL · 功能分析 · Listen/Notify 功能
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        MySQL · 捉虫动态 · 任性的 normal shutdown
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        PgSQL · 追根究底 · WAL日志空间的意外增长
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        MySQL · 社区动态 · MariaDB Role 体系
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        MySQL · TokuDB · TokuDB数据文件大小计算
+                      
+
+                    
+
+ 
+        
+
+    
+
+  
+
+    
+ PgSQL · 功能分析 · Listen/Notify 功能  
+
+    
+ Author: 明虚  
+
+  
+
+  
+
+  
+Listen 和 Notify 是PG很有意思的一个功能，可以用来进行多应用间的通信。它们可以在SQL中使用，也可以用C、JDBC里面的API调用。下面介绍一下其使用方法和内核实现。
+
+使用方法
+
+用一个简单的例子，来看一下Listen/Notify如何使用。假设我们有两个应用A和B，部署在不同的机器上：A机器处理前端用户请求，同时需要将一些可以异步执行的任务，分配给后台服务器B。B接收到任务并处理完成后反馈给A结果。
+
+--
+
+分别在A和B两台机器上初始化PG连接
+
+，
+
+它们互相监听对方消息
+
+，
+
+A负责派发任务给B
+
+--
+
+机器A初始化与PG的连接
+
+session
+ 
+A
+
+:
+
+listen
+ 
+workA
+
+;
+
+commit
+
+;
+
+--
+
+机器B初始化与PG的连接
+
+session
+ 
+B
+
+:
+
+listen
+ 
+workerB
+
+;
+
+commit
+
+;
+
+--
+
+A派发任务给B
+
+session
+ 
+A
+
+:
+
+begin
+
+;
+
+notify
+ 
+workerB
+
+,
+ 
+'do job 1001'
+
+;
+
+commit
+
+;
+
+--
+
+B接受消息
+
+session
+ 
+B
+
+:
+
+begin
+
+;
+
+Asynchronous
+ 
+notification
+ 
+"worker1"
+ 
+with
+ 
+payload
+ 
+"1001"
+ 
+received
+ 
+from
+ 
+server
+ 
+process
+ 
+with
+ 
+PID
+ 
+29826.
+
+commit
+
+;
+
+--
+
+B解析消息
+
+(
+
+可用脚本或应用实现
+
+），
+
+然后完成任务
+
+，
+
+发送反馈给A
+
+session
+ 
+B
+
+:
+
+....
+
+begin
+
+;
+
+notify
+ 
+workA
+ 
+'job 1001 done'
+
+;
+
+commit
+
+;
+
+利用上面的步骤，A和B两个机器通过PG完成了通信。在上面的过程中，需要注意的是：
+
+  
+B要想接受到消息，必须在A Notify之前运行了Listen命令；
+
+  
+A需要使用事务commit操作来触发消息发送；
+
+  
+消息是异步发送到B的，即无论B的状态如何，消息都会先到达PG的消息队列（每个PG实例只有一个唯一的存放所有消息的队列）；B要查看消息，如果使用的是psql客户端，则需要先发送带有事务操作的命令（如begin、commit或rollback）给PG；
+
+  
+A 如果连续发送多个消息，B会一次性收到这些消息；
+
+  
+在C代码里面，你可以使用如下的调用来获取所有已到达的消息，如果没有消息到达，则进入睡眠状态。
+
+    
+while
+ 
+(
+
+1
+
+)
+
+    
+{
+
+        
+sock
+ 
+=
+ 
+PQsocket
+
+(
+
+conn
+
+);
+
+        
+/* Monitor socket. Sleep if there is no message */
+
+        
+select
+
+(
+
+sock
+ 
++
+ 
+1
+
+,
+ 
+&
+
+input_mask
+
+,
+ 
+NULL
+
+,
+ 
+NULL
+
+,
+ 
+NULL
+
+)
+ 
+
+        
+/* Now check for input */
+
+        
+PQconsumeInput
+
+(
+
+conn
+
+);
+
+        
+/* Loop until all notifications currently received have been handled */
+
+        
+while
+ 
+((
+
+notify
+ 
+=
+ 
+PQnotifies
+
+(
+
+conn
+
+))
+ 
+!=
+ 
+NULL
+
+)
+
+        
+{
+
+            
+/* Received some message, print it out */
+
+            
+fprintf
+
+(
+
+stderr
+
+,
+
+                    
+"ASYNC NOTIFY of '%s' received from backend PID %d
+
+\n
+
+"
+
+,
+
+                    
+notify
+
+->
+
+relname
+
+,
+ 
+notify
+
+->
+
+be_pid
+
+);
+
+            
+PQfreemem
+
+(
+
+notify
+
+);
+
+         
+}
+
+    
+}
+
+内核实现
+
+Listen/Notify的实现其实比较简单。主要的数据结构是一个消息队列（
+asyncQueueControl->tail
+和
+asyncQueueControl->head
+分别指向队列尾和队列头）和一个进程状态数组（
+asyncQueueControl->backend
+），如下图所示：
+
+消息队列里面存放了所有进程的所有通知消息，而状态数组存放了所有执行了Listen命令、准备接收异步消息的进程的状态信息。状态数组中含有每个进程已经读取到的消息在队列里面的位置指针。如果有了新消息，进程就从此指针往后取，直到读取全部消息。
+
+当一个连接的后台进程接收到Listen命令时，先将Listen的信息记录下来，然后在事务提交时，执行Listen操作，即把本进程放入状态数组（参见
+Exec_ListenPreCommit
+函数）。
+
+执行Notify命令时，Async_Notify函数负责把通知放入pendingNotifies链表。在事务Commit操作前后，执行下面的逻辑：
+
+  
+调用PreCommit_Notify函数，将pendingNotifies链表中的消息，放入全局消息队列;
+
+  
+执行Commit操作;
+
+  
+利用调用链
+ProcessCompletedNotifies->SignalBackends->SendProcSignal->kill
+，向其他所有状态数组中的进程，发出通知信号。
+
+另一方面，每个进程在接收到信号后，利用函数
+HandleNotifyInterrupt
+处理信号。如果当前进程处于事务中，则不立即处理消息，等到事务提交完毕，调用
+prepare_for_client_read
+读取下一个用户命令时，利用
+ProcessIncomingNotify
+处理消息；否则，立即调用
+ProcessIncomingNotify
+处理消息。
+ProcessIncomingNotify
+最终调用
+NotifyMyFrontEnd
+发送消息到客户端：
+
+ProcessIncomingNotify
+ 
+-->
+ 
+asyncQueueReadAllNotifications
+
+()
+ 
+-->
+ 
+NotifyMyFrontEnd
+
+注意，客户端收到消息后，并不立即显示出来，而是需要用API进行获取。例如，psql就是在执行下一个命令时（如begin、commit），会顺便把收到的消息显示出来的。
+
+总结
+
+Listen/Notify是一个轻量级的应用间通信机制，有了它，具有访问数据库能力的应用可以轻易的利用PG实现互操作。当然，由于消息队列是存放在内存里面的，在发生实例宕机等问题时，消息将丢失，对可靠性要求高的应用，需要自己进行消息持久化（如利用PG存储消息，进行持久化）。
+
+  
+
+    
+
+		
+
+ -->
+  
+
+  
+阿里云PolarDB-数据库内核组
+ -->
+  
+ -->
+  
+社招/校招 欢迎投递简历 直达招聘信息
+ -->
+  
+ -->
+  
+直连月报小编
+ -->
+  
+ -->
+  
+欢迎在github上star AliSQL
+ -->
+  
+
+  阅读：
+ - 
+
+  
+
+本作品采用
+知识共享署名-非商业性使用-相同方式共享 3.0 未本地化版本许可协议
+进行许可。
+
+  jQuery(document).ready(function($){
+    // browser window scroll (in pixels) after which the "back to top" link is shown
+    var offset = 300,
+      //browser window scroll (in pixels) after which the "back to top" link opacity is reduced
+      offset_opacity = 1200,
+      //duration of the top scrolling animation (in ms)
+      scroll_top_duration = 700,
+      //grab the "back to top" link
+      $back_to_top = $('.cd-top');
+
+    //hide or show the "back to top" link
+    $(window).scroll(function(){
+      ( $(this).scrollTop() > offset ) ? $back_to_top.addClass('cd-is-visible') : $back_to_top.removeClass('cd-is-visible cd-fade-out');
+      if( $(this).scrollTop() > offset_opacity ) {
+        $back_to_top.addClass('cd-fade-out');
+      }
+    });
+
+    //smooth scroll to top
+    $back_to_top.on('click', function(event){
+      event.preventDefault();
+      $('body,html').animate({
+        scrollTop: 0 ,
+        }, scroll_top_duration
+      );
+    });
+
+  });

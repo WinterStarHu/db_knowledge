@@ -1,0 +1,415 @@
+# 数据库内核月报
+
+> 来源: http://mysql.taobao.org/monthly/2016/08/02/
+> 分类: 其它
+
+数据库内核月报
+ -->
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+ -->
+  
+hljs.initHighlightingOnLoad();
+
+  
+
+  
+
+  
+
+  
+
+  (function(i,s,o,g,r,a,m){i['GoogleAnalyticsObject']=r;i[r]=i[r]||function(){
+  (i[r].q=i[r].q||[]).push(arguments)},i[r].l=1*new Date();a=s.createElement(o),
+  m=s.getElementsByTagName(o)[0];a.async=1;a.src=g;m.parentNode.insertBefore(a,m)
+  })(window,document,'script','//www.google-analytics.com/analytics.js','ga');
+
+  ga('create', 'UA-62056244-1', 'auto');
+  ga('send', 'pageview');
+
+ -->
+
+  
+
+  
+
+  数据库内核月报
+	
+
+  
+
+    
+数据库内核月报 － 2016 / 08
+
+  
+
+  
+
+    
+
+      
+
+        
+
+          
+当期文章
+
+          
+
+                    
+
+                  
+                      
+
+                        MySQL · 特性分析 ·MySQL 5.7新特性系列四
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        PgSQL · PostgreSQL 逻辑流复制技术的秘密
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        MySQL · 特性分析 · MyRocks简介
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        GPDB · 特性分析· Greenplum 备份架构
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        SQLServer · 最佳实践 · RDS for SQLServer 2012权限限制提升与改善
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        TokuDB · 引擎特性 · REPLACE 语句优化
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        MySQL · 专家投稿 · InnoDB物理行中null值的存储的推断与验证
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        PgSQL · 实战经验 · 旋转门压缩算法在PostgreSQL中的实现
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        MySQL · 源码分析 · Query Cache并发处理
+                      
+
+                    
+
+                    
+
+                  
+                      
+
+                        PgSQL · 源码分析· pg_dump分析
+                      
+
+                    
+
+ 
+        
+
+    
+
+  
+
+    
+ PgSQL · PostgreSQL 逻辑流复制技术的秘密  
+
+    
+ Author: 义从  
+
+  
+
+  
+
+  
+自 PostgreSQL 9.4 ，终于支持了逻辑流复制。本篇文章为大家带来这部分的技术细节的分析。
+
+1. 背景
+
+PostgreSQL 9.4 对逻辑流复制的支持具有相当的意义。我们可以用该技术完成很多企业级的需求。
+
+  
+PostgreSQL 的大版本升级，由于可以使用流复制做增量数据同步，所以停机服务时间会非常短。
+
+  
+PostgreSQL 自定义逻辑拆库。由于是逻辑数据，所以很容易自定义分发规则。例如按表拆，逻辑分表，白名单，黑名单等等。
+
+  
+PostgreSQL 增量同步到其他异构数据库，例如 PG 同步到 Mysql；PG 同步到 Oracle。
+
+  
+逻辑主备同步，逻辑多节点同时可写集群。
+
+2. 名词解析
+
+  
+
+    
+
+      
+Logical Decoding
+
+      
+PostgreSQL 的逻辑日志来源于解析物理 WAL 日志。
+解析 WAL 成为逻辑数据的过程叫 Logical Decoding。
+
+    
+
+    
+
+      
+Replication Slots
+
+      
+保存逻辑或物理流复制的基础信息。类似 Mysql 的位点信息。
+一个 逻辑 slot 创建后，它的相关信息可以通过 pg_replication_slots 系统视图获取。
+如果它在 active 状态，则可以通过系统视图 pg_stat_replication 看到一些 slot 的实时的状态信息。
+
+    
+
+    
+
+      
+Output Plugins
+
+      
+PostgreSQL 的逻辑流复制协议开放一组可编程接口，用于自定义输数据到客户端的逻辑数据的格式。
+这部分实现使用插件的方式被内核集成和使用，称作 Output Plugins。
+
+    
+
+    
+
+      
+Exported Snapshots
+
+      
+当一个逻辑流复制 slot 被创建时，系统会产生一个快照。客户端可以通过它订阅到数据库任意时间点的数据变化。
+
+    
+
+  
+
+3. 逻辑流复制输出的数据格式
+
+Logical Decoding 是把 WAL 日志解析成逻辑日志的过程。这个过程输出的是数据格式可以描述为：
+
+  
+事物开始 任何的变化总是在一个事物中，所以订阅的数据变化的开始是是一个事物被启动的消息，他包括了事物 ID，LSN，开始时间等信息。
+
+  
+数据的变化 包括当前事物中修改的数据。即对某些表的 insert update delete 操作来带的数据变化。
+    
+
+      
+一个事物内可以包含任意个表和任意行数据的变化。
+
+      
+输出的数据的格式和对应表的定义和索引相关，详细信息看后面文章的描述。
+
+    
+
+  
+
+  
+事物的提交 包括事物提交的 LSN，时间等相关信息。
+
+4. Output Plugins 需要完成的工作
+
+上一节的内容提到的数据需要通过 Output Plugins 确定最终的数据格式，再发送给客户端。
+
+这部分的接口表现为下列回调函数：
+
+  
+LogicalDecodeStartupCB startup_cb;
+
+  
+LogicalDecodeBeginCB begin_cb;
+
+  
+LogicalDecodeChangeCB change_cb;
+
+  
+LogicalDecodeCommitCB commit_cb;
+
+  
+LogicalDecodeShutdownCB shutdown_cb;
+
+函数 1，5 是分配和清理插件所需的内存结构。此外的 2，3，4 三个回调函数完全对应上一节中的三个部分。
+开发者可以根据需求实现这一组函数。
+
+4.1 技术细节
+
+毫无疑问，定制逻辑数据格式成为了 Output Plugins 的关键。根据不同的需求产生的数据也会有显著的不同。
+
+  
+发送的数据可以是普通字符串，也可以是二进制字符串。为了客户端解析数据更容易，通常使用二进制字符串表达数据。
+
+  
+如果做同构数据库数据同步，传输的数据可以比较简单。原因是可以使用内部数据直接表达变化的数据。
+
+  
+如果要做异构数据库同步，情况会复杂一些。目前的方案是把增量数据组合成通用 SQL，再写入到异构数据库中。这样就需要给出转换数据成 SQL 语句的所有信息。在变化的数据本身外，还需要包括表名，列名，列数据类型，索引信息等等。
+
+  
+针对不同数据库的特殊字符，还需要处理转译字符的问题。
+
+  
+针对表中的长字段，需要优化。如果不修改这些大字段，可以选择不传输它们。
+
+4.2 REPLICA IDENTITY 如何影响数据的格式
+
+逻辑流复制利用索引的方式优化传输数据的效率，它们可以按表为单位定制。大致分为三种情况:
+
+  
+如果修改的表有 primary key, 则表的变化的逻辑数据只会包括该表变化的列和pk列数据，如果 pk 列被修改，则还会输出老的 pk 列数据。
+
+  
+如果修改的表没有 primary key，则可以使用 alter table 指定一个 REPLICA index，同时需要这个索引列为非空，其产生的效果和 1 相同。
+
+  
+如果修改的表不满足上面的两个条件，而又要做同步，可以使用 alter table 设置这个表的 REPLICA IDENTITY 为 FULL。于是系统在表修改时会记录修改行的所有列，不会做任何的优化。
+
+很明显，给对应的表设置 PK 或指定索引，在数据同步时效率更高。我们可以安需定制同步策略。在实现功能的过程中需要考虑这部分变化。
+
+5. 总结
+
+逻辑流复制特性对 PostgreSQL 意义重大，目前已经有很多相关的数据同步产品应运而生，比如 2nd quadrant 公司的 BDR/UDR。也有公司调整了已有产品原有的技术方案，使用逻辑流复制为增量数据的同步方案，比如 EDB 公司的 xDB。阿里云 RDS 团队也利用该特性推出了 PostgreSQL 的数据迁移服务，并且开源了相关代码。
+最后，我们期待更多相关产品的出现。
+谢谢！
+
+  
+
+    
+
+		
+
+ -->
+  
+
+  
+阿里云PolarDB-数据库内核组
+ -->
+  
+ -->
+  
+社招/校招 欢迎投递简历 直达招聘信息
+ -->
+  
+ -->
+  
+直连月报小编
+ -->
+  
+ -->
+  
+欢迎在github上star AliSQL
+ -->
+  
+
+  阅读：
+ - 
+
+  
+
+本作品采用
+知识共享署名-非商业性使用-相同方式共享 3.0 未本地化版本许可协议
+进行许可。
+
+  jQuery(document).ready(function($){
+    // browser window scroll (in pixels) after which the "back to top" link is shown
+    var offset = 300,
+      //browser window scroll (in pixels) after which the "back to top" link opacity is reduced
+      offset_opacity = 1200,
+      //duration of the top scrolling animation (in ms)
+      scroll_top_duration = 700,
+      //grab the "back to top" link
+      $back_to_top = $('.cd-top');
+
+    //hide or show the "back to top" link
+    $(window).scroll(function(){
+      ( $(this).scrollTop() > offset ) ? $back_to_top.addClass('cd-is-visible') : $back_to_top.removeClass('cd-is-visible cd-fade-out');
+      if( $(this).scrollTop() > offset_opacity ) {
+        $back_to_top.addClass('cd-fade-out');
+      }
+    });
+
+    //smooth scroll to top
+    $back_to_top.on('click', function(event){
+      event.preventDefault();
+      $('body,html').animate({
+        scrollTop: 0 ,
+        }, scroll_top_duration
+      );
+    });
+
+  });
